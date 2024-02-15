@@ -108,12 +108,12 @@ pub fn list_files<F>(dir: &Path, accept: F, depth: usize) -> Result<Vec<PathBuf>
 	Ok(files_list)
 }
 
-pub fn extract_zip_file_with_password(dest_path: &Path, file_path: &Path, password: &str) -> Result<(), HelperError> {
+pub fn extract_zip_file_with_password(extractor: &str, dest_path: &Path, file_path: &Path, password: &str) -> Result<(), HelperError> {
 	let password_arg = "-p".to_owned() + &password;
 	let file_arg = file_path.to_str().unwrap();
 	let dest_arg = "-o".to_owned() + dest_path.to_str().unwrap();
 	println!("Extracting {} with password: {}", &file_arg, &password_arg);
-	let process = match process::Command::new("./7z.sh")
+	let process = match process::Command::new(extractor)
 			.args(&["x", "-y", &dest_arg, &password_arg, &file_arg])
 			.spawn() {
 		Ok(process) => process,
