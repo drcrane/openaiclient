@@ -25,8 +25,8 @@ struct SampleConfig {
 
 #[test]
 fn load_config() -> Result<(), std::io::Error> {
-	let mut config_dir = helpers::config_get_dir(None)?;
-	let mut config_file = config_dir.join("openaiclienttest.json");
+	let mut config_dir = helpers::config_get_dir(Some("openaiclient"))?;
+	let mut config_file = config_dir.join("test.json");
 	fs::remove_file(config_file);
 	let mut config = helpers::config_load::<SampleConfig>("openaiclient", "test");
 	println!("-- {:?}", config);
