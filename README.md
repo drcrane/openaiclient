@@ -64,6 +64,19 @@ Then provide a follow up question from a text file:
     echo "Please provide some proof." >> followup.txt
     cargo run -- 0001 @followup.txt
 
+## Executing Commands and Getting Results
+
+Tools must be specified in the JSON requests sent to GPT. The `datafunc/`
+directory contains a possible test chat template and can be used like this:
+
+    openaiclient --config-dir datafunc/ 1001 "What is the largest file in the current directory?"
+
+The AI will use `tools` to perform tasks on the local computer, listing
+files, compiling code etc. This will be facilitated by `tmux` which can
+persist for more that one execution.
+
+See ***Control Mode*** on [tmux wiki](https://github.com/tmux/tmux/wiki/Control-Mode)
+
 ## Known Working
 
 This was compiled and working with:
@@ -80,4 +93,5 @@ Alpine Linux release 3.18.6
 * [reqwest in Rust](https://www.youtube.com/watch?v=dYVJQ-KQpdc)
 * [Using ChatGPT functions with Azure](https://learn.microsoft.com/en-us/azure/ai-services/openai/how-to/function-calling)
 * [XDG Base Directory](https://wiki.archlinux.org/title/XDG_Base_Directory)
+* [Functon Calling with cURL](https://community.openai.com/t/trying-to-curl-the-response-to-a-tool-call/624919/4)
 

@@ -1,7 +1,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 use serde::de::DeserializeOwned;
-use serde::{Serialize};
+use serde::Serialize;
 use std::string;
 use std::fs::{File, OpenOptions};
 use std::io::{self, Read, Write, Error, ErrorKind};
@@ -90,7 +90,7 @@ pub fn list_files<F>(dir: &Path, accept: F, depth: usize) -> Result<Vec<PathBuf>
 			let entry = entry?;
 			let path = entry.path();
 			if path.is_dir() {
-				if (depth > stack.len()) {
+				if depth > stack.len() {
 					stack.push(path.clone());
 				}
 				match accept(path) {

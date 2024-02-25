@@ -31,6 +31,11 @@ struct Cli {
 	#[clap(long)]
 	/// function name when role is function
 	name: Option<String>,
+	#[clap(long)]
+	/// tool call id (default is to use the id of the last tool call that does not have a response)
+	tool_call_id: Option<String>,
+	#[clap(long)]
+	pretend: bool,
 }
 
 #[tokio::main]
@@ -63,14 +68,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 	ctx.load_or_new_chat(&args.chat_id)?;
 
 	if args.message == "dump" {
-		for message in ctx.chat.unwrap().messages.iter() {
+		for message in ctx.chat.as_ref().unwrap().messages.iter() {
 			if let Some(mesg) = message.content.as_ref() {
 				println!("{}", mesg);
 			}
-			if let Some(function_call) = message.function_call.as_ref() {
-				println!("```{}", &function_call.name);
-				println!("{}", &function_call.arguments);
-				println!("```");
+			if let Some(tool_calls) = message.tool_calls.as_ref() {
+				for tool_call in tool_calls.iter() {
+					println!("```{}", &tool_call.function.name);
+					println!("{}", &tool_call.function.arguments);
+					println!("```");
+				}
 			}
 		}
 		return Ok(());
@@ -86,7 +93,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 		},
 		_ => args.message,
 	};
-	ctx.add_message(&args.role, args.name, &message);
+
+	// Here only one tool call may be added and if more tool calls
+	// are pending then the call_api() function will fail and the
+	// binary may be called again to add more tool call responses
+	// TODO: this needs to be better.
+
+	// If the name is supplied then the response is from a tool
+	match args.name {
+		Some(name) => ctx.add_tool_message(&args.role, &name, args.tool_call_id.as_deref(), &message),
+		None => ctx.add_normal_message(&args.role, &message),
+	};
+
 	let response = ctx.call_api().await?;
 	//let mut resp_file = OpenOptions::new()
 	//	.read(true)

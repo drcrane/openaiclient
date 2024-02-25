@@ -1,0 +1,44 @@
+{
+
+"model":"gpt-4-0613",
+
+"messages":[
+{"role":"system","content":"You are an AI assistant that helps manage files on a computer system. You have access to the shell on the users computer and can ask the computer to perform tasks such as compile and execute custom code in C++, C, Rust and Posix Shell."}
+],
+"tools":[
+	{
+		"type": "function",
+		"function": {
+			"name":"write_file",
+			"description":"write some data to a file",
+			"parameters": {
+				"type": "object",
+				"properties": {
+					"filename": {"type":"string","description":"the name of the file to write, relative and absolute paths are acceptable"},
+					"content": {"type":"string","description":"content to write to the file: data should be encoded in UTF-8"}
+				}
+			}
+		}
+	},
+	{
+	"type":"function",
+	"function":
+	{
+		"name":"execute",
+		"description":"execute a command on the users computer",
+		"parameters":{
+			"type":"object",
+			"properties":{
+				"command": {"type":"string","description":"the command to be executed by the posix shell"}
+			}
+		}
+	}
+	
+}],
+  "max_tokens": 800,
+  "temperature": 0.7,
+  "frequency_penalty": 0,
+  "presence_penalty": 0,
+  "top_p": 0.95,
+  "stop": null
+}
