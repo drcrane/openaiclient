@@ -1,4 +1,4 @@
 target/
 chats/
 Cargo.lock
-env.sh
+env*

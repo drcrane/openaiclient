@@ -1,9 +1,12 @@
 {
 
-"model":"gpt-4-0613",
+"model":"",
 
 "messages":[
-{"role":"system","content":"You are an AI assistant that helps manage files on a computer system. You have access to the shell on the users computer and can ask the computer to perform tasks such as compile and execute custom code in C++, C, Rust and Posix Shell."}
+	{
+		"role":"system",
+		"content":"You are an AI assistant that helps manage files on a computer system. You have access to the shell on the users computer and can ask the computer to perform tasks such as compile and execute custom code in C++, C, Rust and Posix Shell. When specifying files for tools relative and absolute paths are acceptable, the current directory will be used for all relative file operations and changing the directory with the shell will change the directory for reading and writing files also."
+	}
 ],
 "tools":[
 	{
@@ -14,31 +17,47 @@
 			"parameters": {
 				"type": "object",
 				"properties": {
-					"filename": {"type":"string","description":"the name of the file to write, relative and absolute paths are acceptable"},
+					"filename": {"type":"string","description":"the name of the file to write"},
 					"content": {"type":"string","description":"content to write to the file: data should be encoded in UTF-8"}
 				}
 			}
 		}
 	},
 	{
-	"type":"function",
-	"function":
+		"type": "function",
+		"function": {
+			"name": "read_file",
+			"description": "read some data from a file",
+			"parameters": {
+				"type": "object",
+				"properties": {
+					"filename": {"type":"string","description":"the name of the file to read"},
+					"offset": {"type":"integer","description":"the offset in bytes from the start of the file, 0 is the start of the file"},
+					"size": {"type":"integer","description":"number of bytes to read from the file, -1 will read the whole file"}
+				}
+			}
+		}
+	},
 	{
-		"name":"execute",
-		"description":"execute a command on the users computer",
-		"parameters":{
-			"type":"object",
-			"properties":{
-				"command": {"type":"string","description":"the command to be executed by the posix shell"}
+		"type":"function",
+		"function":
+		{
+			"name":"execute",
+			"description":"execute a command on the users computer",
+			"parameters":{
+				"type":"object",
+				"properties":{
+					"command": {"type":"string","description":"the command to be executed by the posix shell"}
+				}
 			}
 		}
 	}
-	
-}],
-  "max_tokens": 800,
-  "temperature": 0.7,
-  "frequency_penalty": 0,
-  "presence_penalty": 0,
-  "top_p": 0.95,
-  "stop": null
+],
+"max_tokens": 800,
+"temperature": 0.7,
+"frequency_penalty": 0,
+"presence_penalty": 0,
+"top_p": 0.95,
+"stop": null
+
 }

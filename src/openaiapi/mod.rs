@@ -2,8 +2,9 @@ use std::path::{Path,PathBuf};
 use serde_json;
 use serde_derive::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::time::Duration;
 use url::Url;
-use reqwest::header::{CONTENT_TYPE,CONTENT_LENGTH};
+use reqwest::header::{CONTENT_TYPE,CONTENT_LENGTH,AUTHORIZATION};
 use std::fs;
 use thiserror::Error;
 //use std::rc::Rc;
@@ -140,6 +141,7 @@ pub struct ChatContext {
 	post_url: url::Url,
 	dirty: bool,
 	pub write_req_resp: bool,
+	model_name: Option<String>,
 }
 
 impl ChatContext {
@@ -153,14 +155,25 @@ impl ChatContext {
 			post_url: url::Url::parse(&post_url)?,
 			dirty: true,
 			write_req_resp: false,
+			model_name: None,
 		})
+	}
+
+	pub fn set_model_name(&mut self, model_name: &str) -> Result<(), Box<dyn std::error::Error>> {
+		self.model_name = Some(model_name.to_string());
+		Ok(())
 	}
 
 	pub fn new_chat(&mut self, chat_id: &str) -> Result<(), Box<dyn std::error::Error>> {
 		let mut empty_chat_file: PathBuf = self.config_dir.clone();
 		empty_chat_file.push("empty_chat.json");
 		println!("Loading template from: {}", empty_chat_file.display());
-		let empty_chat = helpers::read_from_json::<Chat>(empty_chat_file)?;
+		let mut empty_chat = helpers::read_from_json::<Chat>(empty_chat_file)?;
+		if empty_chat.model == "" {
+			if let Some(model) = &self.model_name {
+				empty_chat.model = model.to_string();
+			}
+		}
 		self.chat = Some(empty_chat);
 		self.chat_id = Some(chat_id.to_string());
 		let serialised = serde_json::to_string_pretty(&self.chat)?;
@@ -288,11 +301,15 @@ impl ChatContext {
 			}
 		}
 		let url = self.post_url.clone();
-		let client = reqwest::Client::new();
+		let client = reqwest::Client::builder()
+			.timeout(Duration::from_secs(240))
+			.build()?;
+		let authorization = format!("Bearer {}", self.api_key);
 		let req = client
 			.post(url)
 			.header("api-key", &self.api_key)
 			.header(CONTENT_TYPE, "application/json")
+			.header(AUTHORIZATION, authorization)
 			.body(serialised)
 			.send()
 			.await?;

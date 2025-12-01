@@ -35,6 +35,17 @@ export AZURE_API_BASE=
 export AZURE_API_VERSION=
 ```
 
+Or:
+
+```sh
+export OAICOMPAT_API_KEY=
+export OAICOMPAT_API_BASE=
+export OAICOMPAT_MODEL_NAME=
+```
+
+***IMPORTANT***: `OAICOMPAT_MODEL_NAME` will be overridden by
+the value of `model` in the `chat.json` file.
+
 The history of the chat (to maintain context during a
 conversation with the AI agent) is stored in a JSON file
 located (by default in `chats/`) make sure this directory
@@ -93,5 +104,5 @@ Alpine Linux release 3.18.6
 * [reqwest in Rust](https://www.youtube.com/watch?v=dYVJQ-KQpdc)
 * [Using ChatGPT functions with Azure](https://learn.microsoft.com/en-us/azure/ai-services/openai/how-to/function-calling)
 * [XDG Base Directory](https://wiki.archlinux.org/title/XDG_Base_Directory)
-* [Functon Calling with cURL](https://community.openai.com/t/trying-to-curl-the-response-to-a-tool-call/624919/4)
+* [Function Calling with cURL](https://community.openai.com/t/trying-to-curl-the-response-to-a-tool-call/624919/4)
 

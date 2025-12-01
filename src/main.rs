@@ -54,16 +54,26 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 	let azure_api_base = env::var("AZURE_API_BASE");
 	let azure_api_version = env::var("AZURE_API_VERSION");
 
+	let openaicompat_api_key = env::var("OAICOMPAT_API_KEY");
+	let openaicompat_api_base = env::var("OAICOMPAT_API_BASE");
+	let openaicompat_model_name = env::var("OAICOMPAT_MODEL_NAME");
+
 	let (api_url, api_key) = if let (Ok(key), Ok(base), Ok(ver)) = (azure_api_key, azure_api_base, azure_api_version) {
 		let url_base = format!("{}chat/completions?api-version={}", base, ver);
+		(url_base, key)
+	} else if let (Ok(key), Ok(base)) = (openaicompat_api_key, openaicompat_api_base) {
+		let url_base = format!("{}/chat/completions", base);
 		(url_base, key)
 	} else {
 		return Err(Into::<Box<dyn std::error::Error>>::into(std::io::Error::new(std::io::ErrorKind::Other, "Ooops! no environment variables")));
 	};
 
-    println!("Got chat_id: {} and message: {}", &args.chat_id, &args.message);
+	println!("Got chat_id: {} and message: {}", &args.chat_id, &args.message);
 
 	let mut ctx = openaiapi::ChatContext::new(args.config_dir, args.chats_dir, api_url, api_key)?;
+	if let (Ok(model_name)) = openaicompat_model_name {
+		ctx.set_model_name(&model_name);
+	}
 	ctx.write_req_resp = args.write_req_resp;
 	ctx.load_or_new_chat(&args.chat_id)?;
 
