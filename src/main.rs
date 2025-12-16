@@ -29,20 +29,23 @@ struct Cli {
 	#[clap(long, default_value = "false")]
 	write_req_resp: bool,
 	#[clap(long)]
-	/// function name when role is function
+	/// function name when role is tool
 	name: Option<String>,
 	#[clap(long)]
 	/// tool call id (default is to use the id of the last tool call that does not have a response)
 	tool_call_id: Option<String>,
 	#[clap(long)]
 	pretend: bool,
+	#[clap(long)]
+	/// just append the message, do not perform an API call
+	no_network: bool,
 }
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
 	let args = Cli::parse();
 
-	if args.role == "function" && args.name.is_none() {
+	if args.role == "tool" && args.name.is_none() {
 		let mut cmd = Cli::command();
 		cmd.error(
 			clap::error::ErrorKind::ArgumentConflict,
@@ -93,16 +96,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 		return Ok(());
 	}
 
-	let message = match args.message.chars().nth(0).unwrap() {
-		'@' => {
-			let mut filename = args.message.clone();
-			filename.remove(0);
-			let mut content = String::new();
-			File::open(&filename)?.read_to_string(&mut content)?;
-			content
-		},
-		_ => args.message,
+	let message = if args.message == "-" {
+		helpers::read_stdin::<String>()?
+	} else {
+		match args.message.chars().nth(0).unwrap() {
+			'@' => {
+				let mut filename = args.message.clone();
+				filename.remove(0);
+				let mut content = String::new();
+				File::open(&filename)?.read_to_string(&mut content)?;
+				content
+			},
+			_ => args.message,
+		}
 	};
+
+	println!("message: {}", &message);
 
 	// Here only one tool call may be added and if more tool calls
 	// are pending then the call_api() function will fail and the
@@ -115,16 +124,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 		None => ctx.add_normal_message(&args.role, &message),
 	};
 
-	let response = ctx.call_api().await?;
-	//let mut resp_file = OpenOptions::new()
-	//	.read(true)
-	//	.write(true)
-	//	.create(true)
-	//	.truncate(true)
-	//	.open("response.json")?;
-	//writeln!(resp_file, "{}", response)?;
+	let response = if args.no_network { ctx.call_api().await? } else { "No network".to_string() };
 	ctx.save_chat()?;
 	println!("{}", response);
+//	if (args.role != "tool") {
+//	} else {
+//		ctx.save_chat()?;
+//	}
 	Ok(())
 }
 

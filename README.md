@@ -75,12 +75,40 @@ Then provide a follow up question from a text file:
     echo "Please provide some proof." >> followup.txt
     cargo run -- 0001 @followup.txt
 
+Or from stdin:
+
+    echo "Should we use a different sorting algorithm?" \
+        | cargo run -- 0001 -
+
 ## Executing Commands and Getting Results
 
 Tools must be specified in the JSON requests sent to GPT. The `datafunc/`
 directory contains a possible test chat template and can be used like this:
 
-    openaiclient --config-dir datafunc/ 1001 "What is the largest file in the current directory?"
+    openaiclient --config-dir datafunc/ 1001 "How does the logic for determining the validity of the widget in rinmein.c work?"
+
+At this point there should be a `tool_calls` array in the `assistant`
+response:
+
+    {
+      "role": "assistant",
+      "content": "I'll analyze the logic for determining widget validity in rinmein.c. Let me first examine the file to understand how widget validation works.\n\n",
+      "tool_calls": [
+        {
+          "id": "82FUUHJP2cD5vMHeMMFzkyg4XrvEcT5h",
+          "type": "function",
+          "function": {
+            "name": "read_file",
+            "arguments": "{\"path\":\"rinmein.c\",\"show_line_numbers\":true}"
+          }
+        }
+      ]
+    }
+
+To respond to the model one may send the tool response back with the `@`
+functionality.
+
+    openaiclient --role tool 1001 @rinmein.c
 
 The AI will use `tools` to perform tasks on the local computer, listing
 files, compiling code etc. This will be facilitated by `tmux` which can

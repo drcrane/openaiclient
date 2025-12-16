@@ -12,7 +12,7 @@
 	{
 		"type": "function",
 		"function": {
-			"name":"write_file",
+			"name":"write",
 			"description":"write some data to a file",
 			"parameters": {
 				"type": "object",
@@ -26,14 +26,58 @@
 	{
 		"type": "function",
 		"function": {
-			"name": "read_file",
-			"description": "read some data from a file",
+			"name":"execute_sql"
+			"description": "execute sql commands against the sqlite database. INSERT, UPDATE, DELETE and SELECT are supported. It is also possible to get the structure of the database with some special commands that are like MySQL: DESCRIBE [table_name] and LIST TABLES. In all cases the number of rows that were affected by the command will be returned along with any data.",
+			"parameters": {
+				"type": "string",
+				"description": "the SQL command to execute"
+			}
+		}
+	},
+	{
+		"type":"function",
+		"function":{
+			"name":"multiedit",
+			"description":"Executes a batch of sequential find-and-replace operations on a single file within one atomic transaction. This is the preferred tool for making numerous, distinct changes to one file efficiently.\n\n**Execution Logic:**\n- Edits are applied in the exact order they are provided. The second edit operates on the result of the first, the third on the result of the second, and so on.\n- The entire sequence is atomic. If any single edit fails (e.g., its `old_string` is not found), the whole operation is rolled back, and the file remains unmodified.\n\n**Critical Considerations:**\n- You must first use the `read` tool to understand the file's contents.\n- Plan your sequence of edits carefully. An earlier edit might alter the text that a later edit is intended to match, which could cause the later edit to fail.",
+			"parameters":{
+				"type":"object",
+				"properties":{
+					"path":{"type":"string","description":"path to the file to edit."},
+					"edits":{"type":"array","description":"An array of operations to apply sequentially.",
+						"items":{
+							"type":"object",
+							"properties":{
+								"match":{
+									"type":"string",
+									"description":"the string to match."
+								},
+								"replace":{
+									"type":"string",
+									"description":"the replacement text."
+								},
+								"replace_all":{
+									"type":"boolean",
+									"description":"Whether to replace all occurrences or just the first."
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+	},
+	{
+		"type": "function",
+		"function": {
+			"name": "read",
+			"description": "Retrieves the contents of a specified file. This is your primary method for inspecting code, configuration, or any other text-based file. **Usage:** - An absolute path to the file is required. - For large files, you can read a specific portion by specifying line_start and line_count. If omitted, the file from the start to the end or a maximum of 1000 lines will be returned. - The output is formatted with line numbers for easy reference, which is crucial context for subsequent edit operations. **Best Practices:** - When investigating a task, it is often effective to read multiple potentially relevant files in a single turn to build a complete understanding of the context.",
 			"parameters": {
 				"type": "object",
 				"properties": {
-					"filename": {"type":"string","description":"the name of the file to read"},
-					"offset": {"type":"integer","description":"the offset in bytes from the start of the file, 0 is the start of the file"},
-					"size": {"type":"integer","description":"number of bytes to read from the file, -1 will read the whole file"}
+					"path": {"type":"string","description":"path to the file to read"},
+					"show_line_numbers": {"type":"boolean","description":"whether to include line numbers in the output"},
+					"line_start": {"type":"integer","description":"starting line number (optional)"},
+					"line_count": {"type":"integer","description":"maximum number of lines to be retrieved (optional)"}
 				}
 			}
 		}

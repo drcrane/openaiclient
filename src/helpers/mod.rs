@@ -17,6 +17,14 @@ pub enum HelperError {
 	Serde(#[from] serde_json::Error),
 	#[error("FromUtf8 error: {0}")]
 	FromUtf8Error(#[from] string::FromUtf8Error),
+	#[error("Other Error {0}")]
+	FromString(String),
+}
+
+impl HelperError {
+	pub fn msg<M: Into<String>>(msg: M) -> Self {
+		HelperError::FromString(msg.into())
+	}
 }
 
 pub fn has_specific_extension<P: AsRef<Path>>(path: P, ext: &str) -> bool {
@@ -134,5 +142,46 @@ pub fn extract_zip_file_with_password(extractor: &str, dest_path: &Path, file_pa
 	println!("{}", stdout);
 	eprintln!("{}", stderr);
 	Ok(())
+}
+
+const MAX_READ_BYTES: usize = 32_768;
+
+pub trait FromInputBytes: Sized {
+	fn from_bytes(bytes: Vec<u8>) -> Result<Self, HelperError>;
+}
+
+impl FromInputBytes for Vec<u8> {
+	fn from_bytes(bytes: Vec<u8>) -> Result<Self, HelperError> {
+		Ok(bytes)
+	}
+}
+
+impl FromInputBytes for String {
+	fn from_bytes(bytes: Vec<u8>) -> Result<Self, HelperError> {
+		Ok(String::from_utf8(bytes)?)
+	}
+}
+
+pub fn read_stdin<T>() -> Result<T, HelperError>
+where
+	T: FromInputBytes,
+{
+	let mut stdin = io::stdin();
+
+	let mut buffer = Vec::with_capacity(MAX_READ_BYTES);
+	stdin.by_ref().take(MAX_READ_BYTES as u64).read_to_end(&mut buffer)?;
+
+	if buffer.len() == buffer.capacity() {
+
+		let mut extra = [0u8; 1];
+		let extra_read = stdin.read(&mut extra)?;
+	
+		if extra_read != 0 {
+			return Err(HelperError::msg("Input too large"));
+		}
+
+	}
+
+	T::from_bytes(buffer)
 }
 

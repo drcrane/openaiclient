@@ -81,7 +81,7 @@ impl Message {
 	pub fn normal(role: String, content: String) -> Self {
 		Message{ role: role, content: Some(content), name: None, tool_calls: None, tool_call_id: None }
 	}
-	pub fn tool_response(role: String, name: String, tool_call_id: String, content: String) -> Self {
+	pub fn tool_response(role: String, name: String, tool_call_id: String, content: String, output: String) -> Self {
 		Message{ role: role, name: Some(name), tool_call_id: Some(tool_call_id), content: Some(content), tool_calls: None }
 	}
 }
@@ -130,6 +130,8 @@ pub struct Chat {
 	presence_penalty: u32,
 	top_p: f64,
 	stop: Option<Vec<String>>,
+	#[serde(skip_serializing_if = "Option::is_none")]
+	stream: Option<bool>,
 }
 
 pub struct ChatContext {
@@ -318,10 +320,21 @@ impl ChatContext {
 			fs::write("last_response.json", &body)?;
 		}
 		let response = Self::parse_response(&body)?;
-		let content = match response.content.as_ref() {
+		let human_content = match response.content.as_ref() {
 			Some(content) => content.to_string(),
 			None => "".to_string(),
 		};
+		//serde_json::to_string_pretty(&tool_calls)?,
+		let content = match response.tool_calls.as_ref() {
+			Some(tool_calls) => {
+				let formatted_calls: Vec<String> = tool_calls.into_iter().map(|call|
+					format!("{}: {}\n", call.function.name, call.function.arguments))
+					.collect();
+				format!("{}\n{}", &human_content, &formatted_calls.join("\n"))
+			},
+			None => human_content,
+		};
+		// in the case of a tool call...
 		self.chat.as_mut().ok_or(Box::new(std::io::Error::new(std::io::ErrorKind::Other, "Chat not present in context")))?.messages.push(response);
 		Ok(content)
 	}
