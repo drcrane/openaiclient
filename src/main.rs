@@ -19,7 +19,7 @@ struct Cli {
 	chat_id: String,
 	/// The message to send to the assistant (prefix a filename with @ to send that file as your
 	/// message)
-	message: String,
+	message: Option<String>,
 	#[clap(long, default_value = "user")]
 	role: String,
 	#[clap(long, default_value = "data")]
@@ -29,6 +29,9 @@ struct Cli {
 	#[clap(long, default_value = "false")]
 	write_req_resp: bool,
 	#[clap(long)]
+	/// dump the current chat in a nice format
+	dump: bool,
+	#[clap(long)]
 	/// function name when role is tool
 	name: Option<String>,
 	#[clap(long)]
@@ -36,7 +39,7 @@ struct Cli {
 	tool_call_id: Option<String>,
 	#[clap(long)]
 	pretend: bool,
-	#[clap(long)]
+	#[clap(long, default_value = "false")]
 	/// just append the message, do not perform an API call
 	no_network: bool,
 }
@@ -71,7 +74,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 		return Err(Into::<Box<dyn std::error::Error>>::into(std::io::Error::new(std::io::ErrorKind::Other, "Ooops! no environment variables")));
 	};
 
-	println!("Got chat_id: {} and message: {}", &args.chat_id, &args.message);
+	//let message = match args.message {
+	//	Some(msg) => msg,
+	//	None => "".to_string(),
+	//};
 
 	let mut ctx = openaiapi::ChatContext::new(args.config_dir, args.chats_dir, api_url, api_key)?;
 	if let (Ok(model_name)) = openaicompat_model_name {
@@ -80,7 +86,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 	ctx.write_req_resp = args.write_req_resp;
 	ctx.load_or_new_chat(&args.chat_id)?;
 
-	if args.message == "dump" {
+	if args.dump {
 		for message in ctx.chat.as_ref().unwrap().messages.iter() {
 			if let Some(mesg) = message.content.as_ref() {
 				println!("{}", mesg);
@@ -96,22 +102,33 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 		return Ok(());
 	}
 
-	let message = if args.message == "-" {
-		helpers::read_stdin::<String>()?
-	} else {
-		match args.message.chars().nth(0).unwrap() {
-			'@' => {
-				let mut filename = args.message.clone();
-				filename.remove(0);
-				let mut content = String::new();
-				File::open(&filename)?.read_to_string(&mut content)?;
-				content
-			},
-			_ => args.message,
-		}
+	let message = match args.message.as_deref() {
+		Some(s) if s.starts_with('@') => {
+			// filename
+			let mut filename = s.to_string();
+			filename.remove(0);
+			let mut content = String::new();
+			File::open(&filename)?.read_to_string(&mut content)?;
+			content
+		},
+		Some("-") => {
+			// stdin
+			helpers::read_stdin()?
+		},
+		Some("") => {
+			"".to_string()
+		},
+		Some(s) => {
+			// message supplied on command line
+			s.to_string()
+		},
+		None => {
+			// nothing supplied: do not add to the end of the chat log
+			"".to_string()
+		},
 	};
 
-	println!("message: {}", &message);
+	println!("Got chat_id: {} and message: {}", &args.chat_id, &message);
 
 	// Here only one tool call may be added and if more tool calls
 	// are pending then the call_api() function will fail and the
@@ -119,18 +136,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 	// TODO: this needs to be better.
 
 	// If the name is supplied then the response is from a tool
-	match args.name {
+	let add_tool_res = match args.name {
 		Some(name) => ctx.add_tool_message(&args.role, &name, args.tool_call_id.as_deref(), &message),
-		None => ctx.add_normal_message(&args.role, &message),
+		None => if message != "" { ctx.add_normal_message(&args.role, &message) } else { Ok(()) },
 	};
 
-	let response = if args.no_network { ctx.call_api().await? } else { "No network".to_string() };
+	if let Err(e) = add_tool_res {
+		eprintln!("operation failed {}", e);
+		return Err(e);
+	}
+
+	let response = if args.no_network { "No network".to_string() } else { ctx.call_api().await? };
 	ctx.save_chat()?;
 	println!("{}", response);
-//	if (args.role != "tool") {
-//	} else {
-//		ctx.save_chat()?;
-//	}
 	Ok(())
 }
 

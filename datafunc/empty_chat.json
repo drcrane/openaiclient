@@ -26,7 +26,7 @@
 	{
 		"type": "function",
 		"function": {
-			"name":"execute_sql"
+			"name": "execute_sql",
 			"description": "execute sql commands against the sqlite database. INSERT, UPDATE, DELETE and SELECT are supported. It is also possible to get the structure of the database with some special commands that are like MySQL: DESCRIBE [table_name] and LIST TABLES. In all cases the number of rows that were affected by the command will be returned along with any data.",
 			"parameters": {
 				"type": "string",
@@ -70,7 +70,7 @@
 		"type": "function",
 		"function": {
 			"name": "read",
-			"description": "Retrieves the contents of a specified file. This is your primary method for inspecting code, configuration, or any other text-based file. **Usage:** - An absolute path to the file is required. - For large files, you can read a specific portion by specifying line_start and line_count. If omitted, the file from the start to the end or a maximum of 1000 lines will be returned. - The output is formatted with line numbers for easy reference, which is crucial context for subsequent edit operations. **Best Practices:** - When investigating a task, it is often effective to read multiple potentially relevant files in a single turn to build a complete understanding of the context.",
+			"description": "Retrieves the contents of a specified file. This is your primary method for inspecting code, configuration, or any other text-based file.\n\n**Usage:**\n- An absolute path to the file is required.\n- For large files, you can read a specific portion by specifying line_start and line_count. If omitted, the file from the start to the end or a maximum of 1000 lines will be returned.\n- The output is formatted with line numbers for easy reference, which is crucial context for subsequent edit operations.\n\n**Best Practices:**\n- When investigating a task, it is often effective to read multiple potentially relevant files in a single turn to build a complete understanding of the context.",
 			"parameters": {
 				"type": "object",
 				"properties": {

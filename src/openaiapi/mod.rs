@@ -47,7 +47,7 @@ impl From<std::io::Error> for ChatError {
 
 impl std::fmt::Display for ChatError {
 	fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-		write!(f, "ChatError Occured")
+		write!(f, "ChatError Occured {}", self.message)
 	}
 }
 
@@ -219,7 +219,6 @@ impl ChatContext {
 	}
 
 	pub fn load_or_new_chat(&mut self, chat_id: &str) -> Result<(), Box<dyn std::error::Error>> {
-	//pub fn load_or_new_chat(&mut self, chat_id: &str) -> Result<(), ChatError> {
 		if (self.load_chat(&chat_id).is_ok()) {
 			Ok(())
 		} else {
@@ -261,7 +260,13 @@ impl ChatContext {
 	}
 
 	pub fn add_normal_message(&mut self, role: &str, message: &str) -> Result<(), Box<dyn std::error::Error>> {
-		self.current_chat()?.messages.push(Message::normal(role.to_string(), message.to_string()));
+		let messages = &mut self.current_chat()?.messages;
+		if let Some(last_message) = messages.last_mut() {
+			if (last_message.role == role) {
+				return Err(Box::new(ChatError::new(ChatErrorKind::Other, "Last message was from same role")));
+			}
+		}
+		messages.push(Message::normal(role.to_string(), message.to_string()));
 		self.dirty = true;
 		Ok(())
 	}
