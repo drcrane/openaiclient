@@ -7,6 +7,7 @@ use std::fs::{File,OpenOptions};
 use std::io::{Read,Write};
 use std::env;
 use serde::ser::StdError;
+use base64::{engine::general_purpose, Engine};
 
 mod helpers;
 mod openaiapi;
@@ -17,9 +18,13 @@ mod test;
 #[derive(Parser)]
 struct Cli {
 	chat_id: String,
-	/// The message to send to the assistant (prefix a filename with @ to send that file as your
-	/// message)
-	message: Option<String>,
+	#[arg(num_args = 0..)]
+	/// The message to send to the assistant.\n
+	/// Prefix a filename with @ to send that file as your message.
+	/// Only text and images (jpg, png) are supported.
+	/// Use - to read from stdin (must be the last and only appear once)
+	/// stdin must be UTF-8, images are not supported.
+	messages: Option<Vec<String>>,
 	#[clap(long, default_value = "user")]
 	role: String,
 	#[clap(long, default_value = "data")]
@@ -42,6 +47,39 @@ struct Cli {
 	#[clap(long, default_value = "false")]
 	/// just append the message, do not perform an API call
 	no_network: bool,
+}
+
+fn make_content_part(message: &str) -> Result<openaiapi::ContentPart, Box<dyn std::error::Error>> {
+	let res = if message.starts_with('@') {
+		// filename
+		let mut filename = message.to_string();
+		filename.remove(0);
+		let mut content = String::new();
+		if filename.ends_with("png") {
+			let bytes = std::fs::read(&filename)?;
+			content.push_str("data:image/png;base64,");
+			content.push_str(&general_purpose::STANDARD.encode(&bytes));
+			openaiapi::ContentPart::ImageUrl { image_url: openaiapi::ImageUrlContent { url: content } }
+		} else if filename.ends_with("jpg") {
+			let bytes = std::fs::read(&filename)?;
+			content.push_str("data:image/jpeg;base64,");
+			content.push_str(&general_purpose::STANDARD.encode(&bytes));
+			openaiapi::ContentPart::ImageUrl { image_url: openaiapi::ImageUrlContent { url: content } }
+		} else {
+			// assume the file is a text file
+			File::open(&filename)?.read_to_string(&mut content)?;
+			openaiapi::ContentPart::Text { text: content }
+		}
+	} else if message == "-" {
+		// stdin
+		openaiapi::ContentPart::Text { text: helpers::read_stdin()? }
+	} else if message == "" {
+		openaiapi::ContentPart::Text { text: "".to_string() }
+	} else {
+		// message supplied on command line
+		openaiapi::ContentPart::Text { text: message.to_string() }
+	};
+	Ok(res)
 }
 
 #[tokio::main]
@@ -78,6 +116,25 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 	//	Some(msg) => msg,
 	//	None => "".to_string(),
 	//};
+	
+	if let Some(messages) = args.messages.as_ref() {
+		let mut count = 0;
+		for message in messages {
+			if message == "-" {
+				count = count + 1;
+				if (count > 1) {
+					return Err(Into::<Box<dyn std::error::Error>>::into(std::io::Error::new(std::io::ErrorKind::Other, "Cannot have more than one stdin/- argument!")));
+				}
+			}
+		}
+		if count > 0 {
+			if let Some(message) = messages.last() {
+				if (message != "-") {
+					return Err(Into::<Box<dyn std::error::Error>>::into(std::io::Error::new(std::io::ErrorKind::Other, "Stdin must be the last positional argument")));
+				}
+			}
+		}
+	}
 
 	let mut ctx = openaiapi::ChatContext::new(args.config_dir, args.chats_dir, api_url, api_key)?;
 	if let (Ok(model_name)) = openaicompat_model_name {
@@ -88,8 +145,25 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 	if args.dump {
 		for message in ctx.chat.as_ref().unwrap().messages.iter() {
-			if let Some(mesg) = message.content.as_ref() {
+		//for message in &ctx.chat.as_ref().unwrap().messages {
+			if let Some(content) = message.content.as_ref() {
+				match content {
+					openaiapi::MessageContent::Simple(txt) => println!("Text: {txt}"),
+					openaiapi::MessageContent::Multi(parts) => println!("Multi"),
+				}
+			}
+			if let Some(openaiapi::MessageContent::Simple(mesg)) = message.content.as_ref() {
 				println!("{}", mesg);
+			}
+			if let Some(openaiapi::MessageContent::Multi(parts)) = message.content.as_ref() {
+				for part in parts {
+					match part {
+						openaiapi::ContentPart::Text { text } => println!("Text: {text}"),
+						openaiapi::ContentPart::ImageUrl { image_url } => {
+							println!("Image ({} bytes)", image_url.url.len())
+						}
+					}
+				}
 			}
 			if let Some(tool_calls) = message.tool_calls.as_ref() {
 				for tool_call in tool_calls.iter() {
@@ -102,33 +176,34 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 		return Ok(());
 	}
 
-	let message = match args.message.as_deref() {
-		Some(s) if s.starts_with('@') => {
-			// filename
-			let mut filename = s.to_string();
-			filename.remove(0);
-			let mut content = String::new();
-			File::open(&filename)?.read_to_string(&mut content)?;
-			content
-		},
-		Some("-") => {
-			// stdin
-			helpers::read_stdin()?
-		},
-		Some("") => {
-			"".to_string()
-		},
-		Some(s) => {
-			// message supplied on command line
-			s.to_string()
-		},
-		None => {
-			// nothing supplied: do not add to the end of the chat log
-			"".to_string()
-		},
+	let content = if let Some(messages) = args.messages.as_ref() {
+		let mut content_parts: Vec<openaiapi::ContentPart> = Vec::new();
+		for message in messages {
+			let part = make_content_part(message)?;
+			if let openaiapi::ContentPart::Text { text } = &part {
+				println!("Text: {text}");
+			} else
+			if let openaiapi::ContentPart::ImageUrl { image_url } = &part {
+				println!("Image ({} bytes)", image_url.url.len());
+			}
+			content_parts.push(part);
+		}
+		if content_parts.len() == 1 {
+			if let openaiapi::ContentPart::Text { text } = &content_parts[0] {
+				openaiapi::MessageContent::Simple(text.to_string())
+			} else {
+				openaiapi::MessageContent::Multi(content_parts)
+			}
+		} else {
+			openaiapi::MessageContent::Multi(content_parts)
+		}
+	} else {
+		openaiapi::MessageContent::Simple("".to_string())
 	};
 
-	println!("Got chat_id: {} and message: {}", &args.chat_id, &message);
+
+	//println!("Got chat_id: {} and message: {}", &args.chat_id, &message);
+	println!("Got chat_id: {}", &args.chat_id);
 
 	// Here only one tool call may be added and if more tool calls
 	// are pending then the call_api() function will fail and the
@@ -137,14 +212,26 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 	// If the name is supplied then the response is from a tool
 	let add_tool_res = match args.name {
-		Some(name) => ctx.add_tool_message(&args.role, &name, args.tool_call_id.as_deref(), &message),
-		None => if message != "" { ctx.add_normal_message(&args.role, &message) } else { Ok(()) },
+		Some(name) => {
+			ctx.add_tool_message(&args.role, &name, args.tool_call_id.as_deref(), content)
+		},
+		None => if let openaiapi::MessageContent::Simple(text) = &content {
+			if (text != "") {
+				ctx.add_normal_message(&args.role, content)
+			} else {
+				Ok(())
+			}
+		} else if let openaiapi::MessageContent::Multi(elements) = &content {
+			ctx.add_normal_message(&args.role, content)
+		} else {
+			Ok(())
+		},
 	};
 
-	if let Err(e) = add_tool_res {
-		eprintln!("operation failed {}", e);
-		return Err(e);
-	}
+	//if let Err(e) = add_tool_res {
+	//	eprintln!("operation failed {}", e);
+	//	return Err(e);
+	//}
 
 	let response = if args.no_network { "No network".to_string() } else { ctx.call_api().await? };
 	ctx.save_chat()?;

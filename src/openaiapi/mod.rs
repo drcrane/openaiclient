@@ -68,7 +68,7 @@ pub struct ToolCall {
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Message {
 	pub role: String,
-	pub content: Option<String>,
+	pub content: Option<MessageContent>,
 	#[serde(skip_serializing_if = "Option::is_none")]
 	pub name: Option<String>,
 	#[serde(skip_serializing_if = "Option::is_none")]
@@ -78,12 +78,43 @@ pub struct Message {
 }
 
 impl Message {
-	pub fn normal(role: String, content: String) -> Self {
+	pub fn normal(role: String, content: MessageContent) -> Self {
 		Message{ role: role, content: Some(content), name: None, tool_calls: None, tool_call_id: None }
 	}
-	pub fn tool_response(role: String, name: String, tool_call_id: String, content: String, output: String) -> Self {
+	pub fn tool_response(role: String, name: String, tool_call_id: String, content: MessageContent) -> Self {
 		Message{ role: role, name: Some(name), tool_call_id: Some(tool_call_id), content: Some(content), tool_calls: None }
 	}
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum MessageContent {
+	Simple(String),
+	Multi(Vec<ContentPart>),
+}
+
+impl From<&str> for MessageContent {
+	fn from(s: &str) -> Self {
+		MessageContent::Simple(s.to_string())
+	}
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(tag = "type")] //, rename_all = "lowercase")]
+pub enum ContentPart {
+	#[serde(rename = "text")]
+	Text {
+		text: String,
+	},
+	#[serde(rename = "image_url")]
+	ImageUrl {
+		image_url: ImageUrlContent,
+	},
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ImageUrlContent {
+	pub url: String,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -256,29 +287,31 @@ impl ChatContext {
 
 	pub fn add_message(&mut self, message: Message) -> Result<(), Box<dyn std::error::Error>> {
 		self.current_chat()?.messages.push(message);
+		self.dirty = true;
 		Ok(())
 	}
 
-	pub fn add_normal_message(&mut self, role: &str, message: &str) -> Result<(), Box<dyn std::error::Error>> {
+	pub fn add_normal_message(&mut self, role: &str, message: MessageContent) -> Result<(), Box<dyn std::error::Error>> {
 		let messages = &mut self.current_chat()?.messages;
 		if let Some(last_message) = messages.last_mut() {
 			if (last_message.role == role) {
 				return Err(Box::new(ChatError::new(ChatErrorKind::Other, "Last message was from same role")));
 			}
 		}
-		messages.push(Message::normal(role.to_string(), message.to_string()));
+		//messages.push(Message::normal(role.to_string(), message.into()));
+		messages.push(Message::normal(role.to_string(), message));
 		self.dirty = true;
 		Ok(())
 	}
 
-	pub fn add_tool_message(&mut self, role: &str, name: &str, tool_call_id: Option<&str>, message: &str) -> Result<(), Box<dyn std::error::Error>> {
+	pub fn add_tool_message(&mut self, role: &str, name: &str, tool_call_id: Option<&str>, message: MessageContent) -> Result<(), Box<dyn std::error::Error>> {
 		let message = match tool_call_id {
 			Some(tool_call_str) => {
 				Message{
 					role: role.to_string(),
 					name: Some(name.to_string()),
 					tool_call_id: Some(tool_call_str.to_string()),
-					content: Some(message.to_string()),
+					content: Some(message),
 					tool_calls: None,
 				}
 			},
@@ -287,7 +320,7 @@ impl ChatContext {
 					role: role.to_string(),
 					name: Some(name.to_string()),
 					tool_call_id: Some(self.get_last_tool_call_id()?),
-					content: Some(message.to_string()),
+					content: Some(message),
 					tool_calls: None,
 				}
 			}
@@ -326,7 +359,19 @@ impl ChatContext {
 		}
 		let response = Self::parse_response(&body)?;
 		let human_content = match response.content.as_ref() {
-			Some(content) => content.to_string(),
+			Some(MessageContent::Simple(content)) => content.to_string(),
+			Some(MessageContent::Multi(content_parts)) => {
+				let mut s = String::new();
+				for part in content_parts {
+					if let ContentPart::Text { text } = &part {
+						s = s + text + "\n";
+					} else
+					if let ContentPart::ImageUrl { image_url } = &part {
+						s.push_str(&format!("Image ({} bytes)\n", image_url.url.len()));
+					}
+				}
+				s
+			},
 			None => "".to_string(),
 		};
 		//serde_json::to_string_pretty(&tool_calls)?,
