@@ -11,6 +11,7 @@ use base64::{engine::general_purpose, Engine};
 
 mod helpers;
 mod openaiapi;
+mod todo;
 
 #[cfg(test)]
 mod test;

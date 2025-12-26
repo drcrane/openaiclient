@@ -108,7 +108,17 @@ response:
 To respond to the model one may send the tool response back with the `@`
 functionality.
 
-    openaiclient --role tool 1001 @rinmein.c
+    openaiclient --role tool --name read_file 1001 @rinmein.c
+
+The response sent back to the model will contain the content of the file
+supplied:
+
+    {
+      "role": "tool",
+      "content": "#include <stdio.h>\n\nint main(int argc, char *argv[]) {\n...",
+      "name": "read_file",
+      "tool_call_id": "82FUUHJP2cD5vMHeMMFzkyg4XrvEcT5h"
+    },
 
 The AI will use `tools` to perform tasks on the local computer, listing
 files, compiling code etc. This will be facilitated by `tmux` which can

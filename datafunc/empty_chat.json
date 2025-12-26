@@ -12,6 +12,72 @@
 	{
 		"type": "function",
 		"function": {
+			"name": "get_todo_lists",
+			"description": "get a list of the todo lists",
+			"parameters": {
+				"type": "object",
+				"properties": {}
+			}
+		}
+	},
+	{
+		"type": "function",
+		"function": {
+			"name": "add_todo_task",
+			"description": "add a task to a todo list",
+			"parameters": {
+				"type": "object",
+				"properties": {
+					"name": {"type":"string", "description":"name of the todo list, if the list does not exist it will be created"},
+					"task": {"type":"string", "description":"task to add to the list"}
+				}
+			}
+		}
+	},
+	{
+		"type": "function",
+		"function": {
+			"name": "get_todo_tasks",
+			"description": "get all the tasks and their completion status for a todo list",
+			"parameters": {
+				"type": "object",
+				"properties": {
+					"name": {"type":"string","description":"name of the todo list for which tasks will be listed"}
+				}
+			}
+		}
+	},
+	{
+		"type": "function",
+		"function": {
+			"name": "delete_todo_task",
+			"description": "delete a todo task",
+			"parameters": {
+				"type": "object",
+				"properties": {
+					"name": {"type":"string","description":"name of the todo list"},
+					"task": {"type":"string","description":"task to be deleted"}
+				}
+			}
+		}
+	},
+	{
+		"type": "function",
+		"function": {
+			"name": "complete_todo_task",
+			"description": "mark a task as complete",
+			"parameters": {
+				"type": "object",
+				"properties": {
+					"name": {"type":"string","description":"name of the todo list"},
+					"task": {"type":"string","description":"task to mark completed"}
+				}
+			}
+		}
+	},
+	{
+		"type": "function",
+		"function": {
 			"name":"write",
 			"description":"write some data to a file",
 			"parameters": {
@@ -97,7 +163,7 @@
 		}
 	}
 ],
-"max_tokens": 800,
+"max_tokens": 1000,
 "temperature": 0.7,
 "frequency_penalty": 0,
 "presence_penalty": 0,
