@@ -7,7 +7,7 @@ pub struct Dispatcher {
 }
 
 impl Dispatcher {
-	pub fn dispatch(&self, function_name: &str, arguments: &str) -> Result<String, String> {
+	pub fn dispatch(&mut self, function_name: &str, arguments: &str) -> Result<String, String> {
 		match function_name {
 			"write" => {
 				let args: WriteArgs = serde_json::from_str(arguments).map_err(|e| e.to_string())?;

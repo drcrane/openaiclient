@@ -89,14 +89,6 @@ fn make_content_part(message: &str) -> Result<openaiapi::ContentPart, Box<dyn st
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
 	let args = Cli::parse();
 
-	if args.role == "tool" && args.name.is_none() {
-		let mut cmd = Cli::command();
-		cmd.error(
-			clap::error::ErrorKind::ArgumentConflict,
-			"When adding a message as a function role a function name is required, see --help",
-			).exit();
-	}
-
 	let azure_api_key = env::var("AZURE_API_KEY");
 	let azure_api_base = env::var("AZURE_API_BASE");
 	let azure_api_version = env::var("AZURE_API_VERSION");
@@ -119,7 +111,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 	//	Some(msg) => msg,
 	//	None => "".to_string(),
 	//};
-	
+
+	// If there are some messages
+	// if this is true then messages.len() must be > 0 I think.
 	if let Some(messages) = args.messages.as_ref() {
 		let mut count = 0;
 		for message in messages {
@@ -137,6 +131,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 				}
 			}
 		}
+
+		if messages.len() > 0 && args.role == "tool" && args.name.is_none() {
+			let mut cmd = Cli::command();
+			cmd.error(
+				clap::error::ErrorKind::ArgumentConflict,
+				"When adding a message as a function role a function name is required, see --help",
+				).exit();
+		}
 	}
 
 	let mut ctx = openaiapi::ChatContext::new(args.config_dir, args.chats_dir, api_url, api_key)?;
@@ -148,20 +150,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 	if args.dump {
 		for message in ctx.chat.as_ref().unwrap().messages.iter() {
-		//for message in &ctx.chat.as_ref().unwrap().messages {
-			if let Some(content) = message.content.as_ref() {
-				match content {
-					openaiapi::MessageContent::Simple(txt) => println!("Text: {txt}"),
-					openaiapi::MessageContent::Multi(parts) => println!("Multi"),
-				}
-			}
+			println!("# {}", message.role);
 			if let Some(openaiapi::MessageContent::Simple(mesg)) = message.content.as_ref() {
 				println!("{}", mesg);
 			}
 			if let Some(openaiapi::MessageContent::Multi(parts)) = message.content.as_ref() {
 				for part in parts {
 					match part {
-						openaiapi::ContentPart::Text { text } => println!("Text: {text}"),
+						openaiapi::ContentPart::Text { text } => println!("{text}"),
 						openaiapi::ContentPart::ImageUrl { image_url } => {
 							println!("Image ({} bytes)", image_url.url.len())
 						}
@@ -179,16 +175,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 		return Ok(());
 	}
 
+	// Construct the parts of the content to be sent to the LLM
+	// allows for mulitmodal queries
 	let content = if let Some(messages) = args.messages.as_ref() {
 		let mut content_parts: Vec<openaiapi::ContentPart> = Vec::new();
 		for message in messages {
 			let part = make_content_part(message)?;
-			if let openaiapi::ContentPart::Text { text } = &part {
-				println!("Text: {text}");
-			} else
-			if let openaiapi::ContentPart::ImageUrl { image_url } = &part {
-				println!("Image ({} bytes)", image_url.url.len());
-			}
+//			if let openaiapi::ContentPart::Text { text } = &part {
+//				println!("Text: {text}");
+//			} else
+//			if let openaiapi::ContentPart::ImageUrl { image_url } = &part {
+//				println!("Image ({} bytes)", image_url.url.len());
+//			}
 			content_parts.push(part);
 		}
 		if content_parts.len() == 1 {
@@ -216,17 +214,60 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 	// If the name is supplied then the response is from a tool
 	let add_tool_res = match args.name {
 		Some(name) => {
-			ctx.add_tool_message(&args.role, &name, args.tool_call_id.as_deref(), content)
+			let tool_call_id = match args.tool_call_id {
+				Some(tool_call_id) => {
+					tool_call_id
+				},
+				None => {
+					if let Some(tool_call_id) = ctx.get_last_pending_tool_call_id()? {
+						tool_call_id
+					} else {
+						return Err(Into::<Box<dyn std::error::Error>>::into(std::io::Error::new(std::io::ErrorKind::Other, "Crikey, no tool_call_id, is there a pending tool call?")));
+					}
+				},
+			};
+			ctx.add_tool_message(&args.role, &name, &tool_call_id, content)
 		},
 		None => if let openaiapi::MessageContent::Simple(text) = &content {
 			if (text != "") {
+				println!("Adding normal message");
 				ctx.add_normal_message(&args.role, content)
 			} else {
+				if args.role == "tool" {
+					// there is no name and the message to be appended is empty
+					// we should execute the tool
+					let mut dispatcher = tools::Dispatcher{ todoctx: todo::TodoLibrary::new("todolist.sqlite3") };
+					let last_tool_call_id = ctx.get_last_pending_tool_call_id()?;
+					let tool_call_id = if let Some(tool_call_id) = last_tool_call_id {
+						tool_call_id
+					} else {
+						return Err(Into::<Box<dyn std::error::Error>>::into(std::io::Error::new(std::io::ErrorKind::Other, "Error with processing tool call")));
+					};
+					let tool_call = ctx.get_tool_call(&tool_call_id)?;
+					println!("tool call id {} tool name {}", tool_call.id, tool_call.function.name);
+					let tool_function_name = tool_call.function.name.clone();
+					let tool_response = dispatcher.dispatch(&tool_call.function.name, &tool_call.function.arguments);
+					match tool_response {
+						Ok(ok_resp) => {
+							// The OK response can be sent directly to the model as content
+							println!("OK response: {}", &ok_resp);
+							ctx.add_tool_message("tool", &tool_function_name, &tool_call_id, openaiapi::MessageContent::Simple(ok_resp.to_string()));
+						},
+						Err(err_resp) => {
+							// The error response should be appropriately encoded to send back to the
+							// model, it should also be reported to the user.
+							eprintln!("Error response: {}", err_resp);
+						},
+					};
+				}
+				//let message = ctx.get_last_message();
 				Ok(())
 			}
 		} else if let openaiapi::MessageContent::Multi(elements) = &content {
+			println!("Adding normal multi message");
 			ctx.add_normal_message(&args.role, content)
 		} else {
+			println!("going to execute the tool...");
 			Ok(())
 		},
 	};

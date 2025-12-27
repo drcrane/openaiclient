@@ -15,6 +15,7 @@ use crate::helpers;
 pub enum ChatErrorKind {
 	ChatContainsNoMessages,
 	LastToolCallIdNotFound,
+	LastMessageFromAssistant,
 	Other,
 }
 
@@ -264,7 +265,20 @@ impl ChatContext {
 		}
 	}
 
-	pub fn get_last_tool_call_id(&self) -> Result<String, ChatError> {
+	pub fn get_last_message(&self) -> Result<&Message, Box<dyn std::error::Error>> {
+		match self.chat.as_ref() {
+			Some(chat) => {
+				if let Some(message) = chat.messages.last() {
+					Ok(&message)
+				} else {
+					Err(Box::new(ChatError::new(ChatErrorKind::ChatContainsNoMessages, "No messages in loaded chat")))
+				}
+			},
+			None => Err(Box::new(std::io::Error::new(std::io::ErrorKind::Other, "No chat currently loaded"))),
+		}
+	}
+
+	pub fn get_last_pending_tool_call_id(&self) -> Result<Option<String>, ChatError> {
 		let mut tool_call_id: Option<String> = None;
 		let mut tool_call_ids: Vec<String> = Vec::new();
 		for message in &self.chat.as_ref().ok_or(ChatError::new(ChatErrorKind::ChatContainsNoMessages, "No Messages"))?.messages {
@@ -279,10 +293,25 @@ impl ChatContext {
 			}
 		}
 		if let Some(last_tool_call_id) = tool_call_ids.first() {
-			Ok(last_tool_call_id.to_string())
+			Ok(Some(last_tool_call_id.to_string()))
 		} else {
-			Err(ChatError::new(ChatErrorKind::LastToolCallIdNotFound, "No Last Tool Call ID Found"))
+			Ok(None)
+			//Err(ChatError::new(ChatErrorKind::LastToolCallIdNotFound, "No Last Tool Call ID Found"))
 		}
+	}
+
+	pub fn get_tool_call(&self, tool_call_id: &str) -> Result<&ToolCall, ChatError> {
+		let messages = &self.chat.as_ref().ok_or(ChatError::new(ChatErrorKind::ChatContainsNoMessages, "No Messages"))?.messages;
+		for message in messages {
+			if let Some(tool_calls) = &message.tool_calls {
+				for tool_call in tool_calls {
+					if tool_call.id == tool_call_id {
+						return Ok(tool_call);
+					}
+				}
+			}
+		}
+		Err(ChatError::new(ChatErrorKind::LastToolCallIdNotFound, tool_call_id.clone()))
 	}
 
 	pub fn add_message(&mut self, message: Message) -> Result<(), Box<dyn std::error::Error>> {
@@ -304,26 +333,13 @@ impl ChatContext {
 		Ok(())
 	}
 
-	pub fn add_tool_message(&mut self, role: &str, name: &str, tool_call_id: Option<&str>, message: MessageContent) -> Result<(), Box<dyn std::error::Error>> {
-		let message = match tool_call_id {
-			Some(tool_call_str) => {
-				Message{
-					role: role.to_string(),
-					name: Some(name.to_string()),
-					tool_call_id: Some(tool_call_str.to_string()),
-					content: Some(message),
-					tool_calls: None,
-				}
-			},
-			None => {
-				Message{
-					role: role.to_string(),
-					name: Some(name.to_string()),
-					tool_call_id: Some(self.get_last_tool_call_id()?),
-					content: Some(message),
-					tool_calls: None,
-				}
-			}
+	pub fn add_tool_message(&mut self, role: &str, name: &str, tool_call_id: &str, message: MessageContent) -> Result<(), Box<dyn std::error::Error>> {
+		let message = Message{
+			role: role.to_string(),
+			name: Some(name.to_string()),
+			tool_call_id: Some(tool_call_id.to_string()),
+			content: Some(message),
+			tool_calls: None,
 		};
 		self.current_chat()?.messages.push(message);
 		self.dirty = true;
@@ -335,7 +351,10 @@ impl ChatContext {
 		if self.write_req_resp {
 			fs::write("last_request.json", &serialised)?;
 		}
-		if let Err(err) = self.get_last_tool_call_id() {
+		if self.get_last_message()?.role == "assistant" {
+			return Err(Box::new(ChatError::new(ChatErrorKind::LastMessageFromAssistant, "Last message was from the assistant")));
+		}
+		if let Err(err) = self.get_last_pending_tool_call_id() {
 			if ! matches!(err.kind, ChatErrorKind::LastToolCallIdNotFound) {
 				return Err(Box::new(err));
 			}
@@ -385,7 +404,8 @@ impl ChatContext {
 			None => human_content,
 		};
 		// in the case of a tool call...
-		self.chat.as_mut().ok_or(Box::new(std::io::Error::new(std::io::ErrorKind::Other, "Chat not present in context")))?.messages.push(response);
+		//self.chat.as_mut().ok_or(Box::new(std::io::Error::new(std::io::ErrorKind::Other, "Chat not present in context")))?.messages.push(response);
+		self.add_message(response);
 		Ok(content)
 	}
 

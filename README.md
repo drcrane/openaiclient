@@ -106,9 +106,10 @@ response:
     }
 
 To respond to the model one may send the tool response back with the `@`
-functionality.
+or `-` functionality.
 
-    openaiclient --role tool --name read_file 1001 @rinmein.c
+    openaiclient --role tool --name read 1001 @rinmein.c
+    cat rinmein.c | openaiclient --role rool --name read -
 
 The response sent back to the model will contain the content of the file
 supplied:
@@ -121,8 +122,22 @@ supplied:
     },
 
 The AI will use `tools` to perform tasks on the local computer, listing
-files, compiling code etc. This will be facilitated by `tmux` which can
-persist for more that one execution.
+files, compiling code etc. There are tools already implemented and if the
+function name matches an implemented tool the tool can be executed by the
+client:
+
+    openaiclient 1001 --role tool
+
+The above command will execute the tool and then perform an API request
+with the results of the function call included. To add the results of the
+function call to the chat but not actually perform the API request the
+`--no-network` option may be supplied:
+
+    openaiclient --no-network 1001 --role tool
+
+## TODO List
+
+* Integrate the `tmux` tool allowing the LLM access to a terminal session
 
 See ***Control Mode*** on [tmux wiki](https://github.com/tmux/tmux/wiki/Control-Mode)
 
