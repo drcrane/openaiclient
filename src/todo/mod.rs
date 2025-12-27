@@ -54,9 +54,9 @@ use serde_json;
 use serde_derive::{Deserialize, Serialize};
 
 #[derive(Deserialize)]
-struct TodoRequest {
-	name: Option<String>,
-	task: Option<String>,
+pub struct TodoRequest {
+	pub name: Option<String>,
+	pub task: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -81,35 +81,6 @@ impl TodoLibrary {
 			sqlite3_exec(db, c_sql.as_ptr(), None, ptr::null_mut(), ptr::null_mut());
 		}
 		TodoLibrary { db }
-	}
-
-	pub fn dispatch(&self, function_name: &str, arguments: &str) -> Result<String, String> {
-		let args: TodoRequest = serde_json::from_str(arguments).unwrap_or(TodoRequest { name: None, task: None });
-		match function_name {
-			"add_todo_task" => {
-				let name = args.name.ok_or(format!("Missing 'name' for {}", function_name))?;
-				let task = args.task.ok_or(format!("Missing 'task' for {}", function_name))?;
-				self.add_todo_task(&name, &task)
-			},
-			"complete_todo_task" => {
-				let name = args.name.ok_or(format!("Missing 'name' for {}", function_name))?;
-				let task = args.task.ok_or(format!("Missing 'task' for {}", function_name))?;
-				self.set_todo_task_complete(&name, &task, true)
-			},
-			"delete_todo_task" => {
-				let name = args.name.ok_or(format!("Missing 'name' for {}", function_name))?;
-				let task = args.task.ok_or(format!("Missing 'task' for {}", function_name))?;
-				self.delete_todo_task(&name, &task)
-			},
-			"get_todo_lists" => {
-				self.get_todo_lists()
-			},
-			"get_todo_tasks" => {
-				let name = args.name.ok_or(format!("Missing 'name' for {}", function_name))?;
-				self.get_todo_tasks(&name)
-			},
-			_ => Err(format!("Unknown function: {}", function_name))
-		}
 	}
 
 	pub fn add_todo_task(&self, name: &str, task: &str) -> Result<String, String> {

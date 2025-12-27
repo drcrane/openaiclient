@@ -83,7 +83,7 @@
 			"parameters": {
 				"type": "object",
 				"properties": {
-					"filename": {"type":"string","description":"the name of the file to write"},
+					"path": {"type":"string","description":"path of the file to write"},
 					"content": {"type":"string","description":"content to write to the file: data should be encoded in UTF-8"}
 				}
 			}

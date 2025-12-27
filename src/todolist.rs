@@ -1,9 +1,11 @@
 #![allow(unused)]
 
+mod tools;
 mod todo;
+mod files;
 
 fn main() -> Result<(), String> {
-	let mut tasks = todo::TodoLibrary::new("todolist.sqlite3");
+	let mut tasks = tools::Dispatcher{ todoctx: todo::TodoLibrary::new("todolist.sqlite3") };
 
 	let mut result = tasks.dispatch("add_todo_task", r#"{"name":"Work", "task":"Add a function to complete tasks"}"#)?;
 	println!("Success: {}", result);
