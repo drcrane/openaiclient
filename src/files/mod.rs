@@ -15,6 +15,18 @@ pub struct ReadArgs {
 	line_count: Option<usize>,
 }
 
+#[derive(Deserialize)]
+pub struct MultiEditArgs {
+	pub path: String,
+	pub edits: Vec<EditOperation>,
+}
+
+#[derive(Deserialize)]
+pub struct EditOperation {
+	pub old_string: String,
+	pub new_string: String,
+}
+
 use std::fs;
 use std::io::{self, Read};
 
@@ -54,5 +66,23 @@ impl FileLibrary {
 		}
 
 		Ok(result)
+	}
+
+	pub fn multiedit(args: MultiEditArgs) -> Result<String, String> {
+		let mut content = fs::read_to_string(&args.path).map_err(|e| e.to_string())?;
+		
+		let mut original_content = content.clone();
+		for edit in &args.edits {
+			if let Some(pos) = content.find(&edit.old_string) {
+				content.replace_range(pos..pos + edit.old_string.len(), &edit.new_string);
+			} else {
+				content = original_content.clone();
+				return Err(format!("Edit failed: string '{}' not found", edit.old_string));
+			}
+		}
+		
+		fs::write(&args.path, &content).map_err(|e| e.to_string())?;
+		
+		Ok(format!("Applied {} edits successfully", args.edits.len()))
 	}
 }

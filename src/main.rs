@@ -98,6 +98,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 	let openaicompat_model_name = env::var("OAICOMPAT_MODEL_NAME");
 
 	let todo_database = env::var("TODO_DATABASE").or_else(|_| {
+		//let home = env::var("HOME")?;
 		if let Ok(homedir) = env::var("HOME") {
 			let new_path = PathBuf::from(homedir).join(".local").join("tododatabase.db");
 			let new_string = new_path.to_string_lossy().into_owned();

@@ -361,7 +361,7 @@ impl ChatContext {
 		}
 		let url = self.post_url.clone();
 		let client = reqwest::Client::builder()
-			.timeout(Duration::from_secs(240))
+			.timeout(Duration::from_secs(60 * 10))
 			.build()?;
 		let authorization = format!("Bearer {}", self.api_key);
 		let req = client

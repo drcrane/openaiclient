@@ -1,5 +1,5 @@
 use serde_json;
-use super::files::{FileLibrary, WriteArgs, ReadArgs};
+use super::files::{FileLibrary, WriteArgs, ReadArgs, MultiEditArgs};
 use super::todo::{TodoLibrary, TodoRequest};
 
 pub struct Dispatcher {
@@ -16,6 +16,10 @@ impl Dispatcher {
 			"read" => {
 				let args: ReadArgs = serde_json::from_str(arguments).map_err(|e| e.to_string())?;
 				FileLibrary::read_file(args)
+			},
+			"multiedit" => {
+				let args: MultiEditArgs = serde_json::from_str(arguments).map_err(|e| e.to_string())?;
+				FileLibrary::multiedit(args)
 			},
 			"add_todo_task" => {
 				let args: TodoRequest = serde_json::from_str(arguments).unwrap_or(TodoRequest { name: None, task: None });
