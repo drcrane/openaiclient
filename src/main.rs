@@ -97,6 +97,31 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 	let openaicompat_api_base = env::var("OAICOMPAT_API_BASE");
 	let openaicompat_model_name = env::var("OAICOMPAT_MODEL_NAME");
 
+	let todo_database = env::var("TODO_DATABASE").or_else(|_| {
+		if let Ok(homedir) = env::var("HOME") {
+			let new_path = PathBuf::from(homedir).join(".local").join("tododatabase.db");
+			let new_string = new_path.to_string_lossy().into_owned();
+			println!("WARN: Using {}", &new_string);
+			Ok(new_string)
+		} else {
+			Err(Into::<Box<dyn std::error::Error>>::into(std::io::Error::new(std::io::ErrorKind::Other, "Environment variables TODO_DATABASE and HOME missing")))
+		}
+	})?;
+
+	/*let todo_database = match env::var("TODO_DATABASE") {
+		Ok(dbfile) => {
+			dbfile
+		},
+		Err(err) => {
+			if let Ok(homedir) = env::var("HOME") {
+				let new_path = PathBuf::from(homedir).join("tododatabase.db");
+				new_path.to_str().ok_or(std::io::Error::new(std::io::ErrorKind::Other, "Ooops! no environment variables"))?.to_string()
+			} else {
+				return Err(Into::<Box<dyn std::error::Error>>::into(std::io::Error::new(std::io::ErrorKind::Other, "Ooops! no environment variables")));
+			}
+		},
+	};*/
+
 	let (api_url, api_key) = if let (Ok(key), Ok(base), Ok(ver)) = (azure_api_key, azure_api_base, azure_api_version) {
 		let url_base = format!("{}chat/completions?api-version={}", base, ver);
 		(url_base, key)
@@ -236,7 +261,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 				if args.role == "tool" {
 					// there is no name and the message to be appended is empty
 					// we should execute the tool
-					let mut dispatcher = tools::Dispatcher{ todoctx: todo::TodoLibrary::new("todolist.sqlite3") };
+					let mut dispatcher = tools::Dispatcher{ todoctx: todo::TodoLibrary::new(&todo_database) };
 					let last_tool_call_id = ctx.get_last_pending_tool_call_id()?;
 					let tool_call_id = if let Some(tool_call_id) = last_tool_call_id {
 						tool_call_id
