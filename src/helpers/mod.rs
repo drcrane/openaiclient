@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use std::fs;
 use std::path::{Path, PathBuf};
 use serde::de::DeserializeOwned;
@@ -88,25 +90,27 @@ pub fn save_to_json<T: Serialize>(file_path: impl AsRef<Path>, object: &T) -> Re
 	Ok(())
 }
 
-pub fn list_files<F>(dir: &Path, accept: F, depth: usize) -> Result<Vec<PathBuf>, io::Error> where F: Fn(PathBuf) -> Option<PathBuf> {
+pub fn list_files<F>(dir: &Path, mut accept: F, depth: usize) -> Result<Vec<PathBuf>, io::Error> where F: FnMut(&Path) -> Option<PathBuf> {
 	let mut files_list = Vec::new();
 	let mut stack = Vec::new();
-	stack.push(dir.to_path_buf());
+	stack.push((dir.to_path_buf(), 0));
+	let base_depth = dir.components().count();
 
-	while let Some(current_dir) = stack.pop() {
+	while let Some((current_dir, current_depth)) = stack.pop() {
 		for entry in fs::read_dir(current_dir)? {
-			let entry = entry?;
-			let path = entry.path();
-			if path.is_dir() {
-				if depth > stack.len() {
-					stack.push(path.clone());
+			let curr_entry = entry?;
+			let path = curr_entry.path();
+			let file_type = curr_entry.file_type()?;
+			if file_type.is_dir() {
+				if (path.components().count() - base_depth) < depth {
+					stack.push((path.clone(), current_depth + 1));
+					match accept(&path) {
+						Some(result_path) => files_list.push(result_path),
+						None => {}
+					}
 				}
-				match accept(path) {
-					Some(result_path) => files_list.push(result_path),
-					None => {}
-				}
-			} else if path.is_file() {
-				match accept(path) {
+			} else if file_type.is_file() {
+				match accept(&path) {
 					Some(result_path) => files_list.push(result_path),
 					None => {}
 				}
