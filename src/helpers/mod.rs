@@ -94,25 +94,18 @@ pub fn list_files<F>(dir: &Path, mut accept: F, depth: usize) -> Result<Vec<Path
 	let mut files_list = Vec::new();
 	let mut stack = Vec::new();
 	stack.push((dir.to_path_buf(), 0));
-	let base_depth = dir.components().count();
 
 	while let Some((current_dir, current_depth)) = stack.pop() {
 		for entry in fs::read_dir(current_dir)? {
 			let curr_entry = entry?;
 			let path = curr_entry.path();
 			let file_type = curr_entry.file_type()?;
-			if file_type.is_dir() {
-				if (path.components().count() - base_depth) < depth {
+			if current_depth < depth {
+				if file_type.is_dir() {
 					stack.push((path.clone(), current_depth + 1));
-					match accept(&path) {
-						Some(result_path) => files_list.push(result_path),
-						None => {}
-					}
 				}
-			} else if file_type.is_file() {
-				match accept(&path) {
-					Some(result_path) => files_list.push(result_path),
-					None => {}
+				if let Some(result_path) = accept(&path) {
+					files_list.push(result_path)
 				}
 			}
 		}
