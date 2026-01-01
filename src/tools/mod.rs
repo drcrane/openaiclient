@@ -1,6 +1,7 @@
 use serde_json;
-use super::files::{FileLibrary, WriteArgs, ReadArgs, MultiEditArgs};
+use super::files::{FileLibrary, WriteArgs, ReadArgs, EditArgs, MultiEditArgs};
 use super::todo::{TodoLibrary, TodoRequest};
+mod files;
 
 pub struct Dispatcher {
 	pub todoctx: TodoLibrary,
@@ -11,15 +12,25 @@ impl Dispatcher {
 		match function_name {
 			"write" => {
 				let args: WriteArgs = serde_json::from_str(arguments).map_err(|e| e.to_string())?;
-				FileLibrary::write_file(&args.path, &args.content)
+				FileLibrary::write_file(args)
+			},
+			"write_file" => {
+				files::write_file(args)
 			},
 			"read" => {
 				let args: ReadArgs = serde_json::from_str(arguments).map_err(|e| e.to_string())?;
 				FileLibrary::read_file(args)
 			},
+			"edit" => {
+				let args: EditArgs = serde_json::from_str(arguments).map_err(|e| e.to_string())?;
+				FileLibrary::edit_file(args)
+			},
 			"multiedit" => {
 				let args: MultiEditArgs = serde_json::from_str(arguments).map_err(|e| e.to_string())?;
 				FileLibrary::multiedit(args)
+			},
+			"search_replace" => {
+				files::search_replace(arguments)
 			},
 			"add_todo_task" => {
 				let args: TodoRequest = serde_json::from_str(arguments).unwrap_or(TodoRequest { name: None, task: None });

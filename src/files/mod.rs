@@ -5,6 +5,8 @@ use serde_derive::Deserialize;
 pub struct WriteArgs {
 	pub path: String,
 	pub content: String,
+	#[serde(default)]
+	pub append: bool,
 }
 
 #[derive(Deserialize)]
@@ -13,6 +15,13 @@ pub struct ReadArgs {
 	show_line_numbers: Option<bool>,
 	line_start: Option<usize>,
 	line_count: Option<usize>,
+}
+
+#[derive(Deserialize)]
+pub struct EditArgs {
+	pub path: String,
+	pub old_string: String,
+	pub new_string: String,
 }
 
 #[derive(Deserialize)]
@@ -28,16 +37,29 @@ pub struct EditOperation {
 }
 
 use std::fs;
-use std::io::{self, Read};
+use std::fs::OpenOptions;
+use std::io::{self, Read, Write};
 
 pub struct FileLibrary {
 }
 
 impl FileLibrary {
-	pub fn write_file(path: &str, content: &str) -> Result<String, String> {
-		fs::write(&path, &content).map_err(|e| e.to_string())?;
+	pub fn write_file(args: WriteArgs) -> Result<String, String> {
+		if args.append {
+			let mut file = OpenOptions::new()
+				.append(true)
+				.create(true)
+				.write(true)
+				.open(&args.path)
+				.map_err(|e| e.to_string())?;
+			
+			file.write_all(&args.content.as_bytes())
+				.map_err(|e| e.to_string())?;
+		} else {
+			fs::write(&args.path, &args.content).map_err(|e| e.to_string())?;
+		}
 
-		Ok(format!("{} bytes written", content.len()))
+		Ok(format!("{} bytes written", args.content.len()))
 	}
 
 	pub fn read_file(args: ReadArgs) -> Result<String, String> {
@@ -84,5 +106,18 @@ impl FileLibrary {
 		fs::write(&args.path, &content).map_err(|e| e.to_string())?;
 		
 		Ok(format!("Applied {} edits successfully", args.edits.len()))
+	}
+
+	pub fn edit_file(args: EditArgs) -> Result<String, String> {
+		let mut content = fs::read_to_string(&args.path).map_err(|e| e.to_string())?;
+		let mut original = content.clone();
+		if let Some(pos) = content.find(&args.old_string) {
+			content.replace_range(pos..pos + args.old_string.len(), &args.new_string);
+		} else {
+			//content = original.clone();
+			return Err(format!("Edit failed: string '{}' not found", args.old_string));
+		};
+		fs::write(&args.path, &content).map_err(|e| e.to_string())?;
+		Ok(format!("Edit applied successfully"))
 	}
 }

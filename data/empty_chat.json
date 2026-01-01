@@ -81,7 +81,8 @@
 				"type": "object",
 				"properties": {
 					"path": {"type":"string","description":"path of the file to write"},
-					"content": {"type":"string","description":"content to write to the file: data should be encoded in UTF-8"}
+					"content": {"type":"string","description":"content to write to the file: data should be encoded in UTF-8"},
+					"append": {"type":"boolean","description":"true to append the content to the end of the file false or unspecified will overwrite the file"}
 				}
 			}
 		}
@@ -98,33 +99,17 @@
 		}
 	},
 	{
-		"type":"function",
-		"function":{
-			"name":"multiedit",
-			"description":"Executes a batch of sequential find-and-replace operations on a single file within one atomic transaction. This is the preferred tool for making numerous, distinct changes to one file efficiently.\n\n**Execution Logic:**\n- Edits are applied in the exact order they are provided. The second edit operates on the result of the first, the third on the result of the second, and so on.\n- The entire sequence is atomic. If any single edit fails (e.g., its `old_string` is not found), the whole operation is rolled back, and the file remains unmodified.\n\n**Critical Considerations:**\n- You must first use the `read` tool to understand the file's contents.\n- Plan your sequence of edits carefully. An earlier edit might alter the text that a later edit is intended to match, which could cause the later edit to fail.",
-			"parameters":{
-				"type":"object",
-				"properties":{
-					"path":{"type":"string","description":"path to the file to edit."},
-					"edits":{"type":"array","description":"An array of operations to apply sequentially.",
-						"items":{
-							"type":"object",
-							"properties":{
-								"match":{
-									"type":"string",
-									"description":"the string to match."
-								},
-								"replace":{
-									"type":"string",
-									"description":"the replacement text."
-								},
-								"replace_all":{
-									"type":"boolean",
-									"description":"Whether to replace all occurrences or just the first."
-								}
-							}
-						}
-					}
+		"type": "function",
+		"function": {
+			"name": "edit",
+			"description": "execute a string replacement operation on a file.",
+			"parameters": {
+				"type": "object",
+				"properties": {
+					"path": {"type": "string", "description": "path to file to edit"},
+					"match": {"type": "string", "description": "the string to match"},
+					"replace": {"type": "string", "description": "the replacement string"},
+					"replace_all": {"type": "string", "description": "whether to replace all occurrences or just the first"}
 				}
 			}
 		}
