@@ -11,8 +11,6 @@ use base64::{engine::general_purpose, Engine};
 
 mod helpers;
 mod openaiapi;
-mod todo;
-mod files;
 mod tools;
 
 #[cfg(test)]
@@ -262,7 +260,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 				if args.role == "tool" {
 					// there is no name and the message to be appended is empty
 					// we should execute the tool
-					let mut dispatcher = tools::Dispatcher{ todoctx: todo::TodoLibrary::new(&todo_database) };
+					let mut dispatcher = tools::Dispatcher{ todoctx: tools::todo::TodoLibrary::new(&todo_database) };
 					let last_tool_call_id = ctx.get_last_pending_tool_call_id()?;
 					let tool_call_id = if let Some(tool_call_id) = last_tool_call_id {
 						tool_call_id

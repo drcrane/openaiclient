@@ -1,7 +1,10 @@
 use serde_json;
-use super::files::{FileLibrary, WriteArgs, ReadArgs, EditArgs, MultiEditArgs};
-use super::todo::{TodoLibrary, TodoRequest};
-mod files;
+//use super::files::{FileLibrary, WriteArgs, ReadArgs, EditArgs, MultiEditArgs};
+//use super::todo::{TodoLibrary, TodoRequest};
+pub mod todo;
+pub mod files;
+use self::todo::{TodoLibrary, TodoRequest};
+use self::files::{FileLibrary, WriteArgs, ReadArgs, EditArgs, MultiEditArgs};
 
 pub struct Dispatcher {
 	pub todoctx: TodoLibrary,
@@ -15,7 +18,7 @@ impl Dispatcher {
 				FileLibrary::write_file(args)
 			},
 			"write_file" => {
-				files::write_file(args)
+				files::write_file(arguments)
 			},
 			"read" => {
 				let args: ReadArgs = serde_json::from_str(arguments).map_err(|e| e.to_string())?;

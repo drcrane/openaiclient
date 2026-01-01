@@ -1,13 +1,14 @@
 #![allow(unused_imports)]
 #![allow(dead_code)]
 #![allow(unused_variables)]
+mod tools;
+mod helpers;
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 use regex::Regex;
 use std::ffi::OsString;
-mod helpers;
-mod tools::files::make_gitaccept_matcher;
+use tools::files::make_gitaccept_matcher;
 
 pub fn list_files<F>(dir: &Path, accept: &F, depth: usize) -> Result<Vec<PathBuf>, io::Error>
 where
@@ -56,9 +57,7 @@ fn read_gitignore(dir: &Path) -> Result<Vec<Regex>, io::Error> {
 }
 
 fn create_accept_function(dir: &Path) -> Result<impl Fn(&Path) -> Option<PathBuf>, io::Error> {
-	//let patterns = read_gitignore(dir)?;
 	Ok(|path: &Path| {
-		//println!("- {}", path.display());
 		match fs::metadata(&path) {
 			Ok(metadata) => {
 				if metadata.is_dir() {
@@ -71,23 +70,17 @@ fn create_accept_function(dir: &Path) -> Result<impl Fn(&Path) -> Option<PathBuf
 				None
 			},
 		}
-		//let path_str = path.to_string_lossy();
-		//if patterns.iter().any(|pattern| pattern.is_match(&path_str)) {
-		//	None
-		//} else {
-		//	println!("+ {}", path.display());
-		//	Some(path)
-		//}
 	})
 }
 
 fn main() -> Result<(), io::Error> {
 	let dir = Path::new(".");
-	let accept = if let Some(gitignore) = fs::read_to_string(".gitignore") {
-		make_gitaccept_matcher(gitignore)
-	} else {
-		create_accept_function(dir)?
-	};
+	//let accept = if let Ok(gitignore) = fs::read_to_string(".gitignore") {
+	//	make_gitaccept_matcher(&gitignore)
+	//} else {
+	//	create_accept_function(dir)?
+	//};
+    let accept = make_gitaccept_matcher(&fs::read_to_string(".gitignore")?);
 	let files = helpers::list_files(dir, &accept, 2)?;
 	for file in files {
 		match file.strip_prefix(dir) {

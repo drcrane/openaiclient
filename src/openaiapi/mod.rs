@@ -311,7 +311,7 @@ impl ChatContext {
 				}
 			}
 		}
-		Err(ChatError::new(ChatErrorKind::LastToolCallIdNotFound, tool_call_id.clone()))
+		Err(ChatError::new(ChatErrorKind::LastToolCallIdNotFound, tool_call_id))
 	}
 
 	pub fn add_message(&mut self, message: Message) -> Result<(), Box<dyn std::error::Error>> {
