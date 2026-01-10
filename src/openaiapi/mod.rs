@@ -14,6 +14,7 @@ use crate::helpers;
 #[derive(Debug)]
 pub enum ChatErrorKind {
 	ChatContainsNoMessages,
+	SystemPromptNotFound,
 	LastToolCallIdNotFound,
 	LastMessageFromAssistant,
 	Other,
@@ -198,10 +199,24 @@ impl ChatContext {
 		Ok(())
 	}
 
+	pub fn set_system_prompt(&mut self, system_prompt: &str) -> Result<(), Box<dyn std::error::Error>> {
+		if let Some(message) = self.chat.as_mut().and_then(|chat| chat.messages.first_mut()) {
+			if (message.role != "system") {
+				Err(Box::new(ChatError::new(ChatErrorKind::SystemPromptNotFound, "First message was not a system prompt")))
+			} else {
+				message.content = Some(MessageContent::from(system_prompt));
+				self.dirty = true;
+				Ok(())
+			}
+		} else {
+			Err(Box::new(ChatError::new(ChatErrorKind::SystemPromptNotFound, "There are no messages.")))
+		}
+	}
+
 	pub fn new_chat(&mut self, chat_id: &str) -> Result<(), Box<dyn std::error::Error>> {
 		let mut empty_chat_file: PathBuf = self.config_dir.clone();
 		empty_chat_file.push("empty_chat.json");
-		println!("Loading template from: {}", empty_chat_file.display());
+		//println!("Loading template from: {}", empty_chat_file.display());
 		let mut empty_chat = helpers::read_from_json::<Chat>(empty_chat_file)?;
 		if empty_chat.model == "" {
 			if let Some(model) = &self.model_name {

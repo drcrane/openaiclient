@@ -1,14 +1,17 @@
 #![allow(dead_code)]
+#![allow(unused_imports)]
 
-use std::fs;
-use std::path::{Path, PathBuf};
-use serde::de::DeserializeOwned;
-use serde::Serialize;
-use std::string;
-use std::fs::{File, OpenOptions};
+//use std::fs;
+use std::fs::{self, File, OpenOptions};
+//use std::io;
 use std::io::{self, Read, Write, Error, ErrorKind};
-use std::process;
+use std::path::{Path, PathBuf};
 use std::env;
+use std::process;
+use serde::Serialize;
+use serde::de::DeserializeOwned;
+use std::string;
+use std::collections::HashMap;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -180,5 +183,170 @@ where
 	}
 
 	T::from_bytes(buffer)
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum State {
+	Normal,
+	PossibleOpen,
+	InKey,
+	PossibleClose,
+}
+
+pub struct TemplateProcessor {
+	replacements: HashMap<String, String>,
+}
+
+impl TemplateProcessor {
+	pub fn new() -> Self {
+		Self {
+			replacements: HashMap::new(),
+		}
+	}
+
+	pub fn with_replacements(replacements: HashMap<String, String>) -> Self {
+		Self { replacements }
+	}
+
+	pub fn add_replacement(&mut self, key: String, value: String) {
+		self.replacements.insert(key, value);
+	}
+
+	pub fn remove_replacement(&mut self, key: &str) -> Option<String> {
+		self.replacements.remove(key)
+	}
+
+	pub fn get_replacement(&self, key: &str) -> Option<&String> {
+		self.replacements.get(key)
+	}
+
+	pub fn replacements(&self) -> &HashMap<String, String> {
+		&self.replacements
+	}
+
+	pub fn process_template(&self, template: &str) -> String {
+		let mut output = String::new();
+		let mut state = State::Normal;
+		let mut current_key = String::new();
+		
+		for ch in template.chars() {
+			match state {
+				State::Normal => {
+					if ch == '{' {
+						state = State::PossibleOpen;
+					} else {
+						output.push(ch);
+					}
+				}
+				State::PossibleOpen => {
+					if ch == '%' {
+						state = State::InKey;
+						current_key.clear();
+					} else {
+						output.push('{');
+						output.push(ch);
+						state = State::Normal;
+					}
+				}
+				State::InKey => {
+					if ch == '%' {
+						state = State::PossibleClose;
+					} else {
+						current_key.push(ch);
+					}
+				}
+				State::PossibleClose => {
+					if ch == '}' {
+						// Found complete tag: {% key %}
+						let key = current_key.trim();
+						if let Some(replacement) = self.replacements.get(key) {
+							output.push_str(replacement);
+						} else {
+							// Key not found, output original tag
+							output.push_str("{%");
+							output.push_str(key);
+							output.push_str("%}");
+						}
+						state = State::Normal;
+					} else {
+						// Not a closing brace, so the '%' was part of the key
+						current_key.push('%');
+						current_key.push(ch);
+						state = State::InKey;
+					}
+				}
+			}
+		}
+		
+		match state {
+			State::PossibleOpen => {
+				output.push('{');
+			}
+			State::InKey => {
+				output.push_str("{%");
+				output.push_str(&current_key);
+			}
+			State::PossibleClose => {
+				output.push_str("{%");
+				output.push_str(&current_key);
+				output.push('%');
+			}
+			State::Normal => {}
+		}
+		
+		output
+	}
+}
+
+/// Move a file from `src` to `dst`.
+/// - First tries `fs::rename` (fast, atomic on same filesystem).
+/// - If that fails (commonly cross-filesystem), falls back to copying then removing the source.
+/// - Tries to preserve file permissions where possible.
+///
+/// Returns `Ok(())` on success or the last encountered `io::Error`.
+pub fn move_file_fallback(src: &Path, dst: &Path) -> io::Result<()> {
+    // Fast path: try rename first
+    match fs::rename(src, dst) {
+        Ok(()) => return Ok(()),
+        Err(_) => {
+            // If rename failed for some reason other than cross-device, we still try fallback.
+            // We'll keep the rename error only if fallback also fails, to surface the most relevant error.
+            // Proceed to copy+remove fallback below.
+            let copy_result = copy_with_permissions(src, dst);
+            match copy_result {
+                Ok(()) => {
+                    // Remove source only after successful copy
+                    if let Err(remove_err) = fs::remove_file(src) {
+                        // Attempt to clean up the partially-copied dst on failure to remove source.
+                        let _ = fs::remove_file(dst);
+                        return Err(remove_err);
+                    }
+                    return Ok(());
+                }
+                Err(copy_err) => {
+                    // Return the copy error; if you prefer the original rename error instead, return rename_err.
+                    return Err(copy_err);
+                }
+            }
+        }
+    }
+}
+
+fn copy_with_permissions(src: &Path, dst: &Path) -> io::Result<()> {
+    // Ensure parent directory of dst exists (or let copy fail)
+    if let Some(parent) = dst.parent() {
+        fs::create_dir_all(parent)?;
+    }
+
+    // Perform copy (streams content)
+    fs::copy(src, dst)?;
+
+    // Try to preserve permissions; ignore if not supported on platform
+    if let Ok(metadata) = fs::metadata(src) {
+        let perm = metadata.permissions();
+        let _ = fs::set_permissions(dst, perm);
+    }
+
+    Ok(())
 }
 

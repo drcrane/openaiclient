@@ -3,7 +3,7 @@
 use clap::{CommandFactory,Parser};
 use url::Url;
 use std::path::PathBuf;
-use std::fs::{File,OpenOptions};
+use std::fs::{self,File,OpenOptions};
 use std::io::{Read,Write};
 use std::env;
 use serde::ser::StdError;
@@ -34,6 +34,9 @@ struct Cli {
 	chats_dir: PathBuf,
 	#[clap(long, default_value = "false")]
 	write_req_resp: bool,
+	#[clap(long)]
+	/// overwrite system prompt with the content of this file
+	system_prompt: Option<String>,
 	#[clap(long)]
 	/// dump the current chat in a nice format
 	dump: bool,
@@ -106,20 +109,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 			Err(Into::<Box<dyn std::error::Error>>::into(std::io::Error::new(std::io::ErrorKind::Other, "Environment variables TODO_DATABASE and HOME missing")))
 		}
 	})?;
-
-	/*let todo_database = match env::var("TODO_DATABASE") {
-		Ok(dbfile) => {
-			dbfile
-		},
-		Err(err) => {
-			if let Ok(homedir) = env::var("HOME") {
-				let new_path = PathBuf::from(homedir).join("tododatabase.db");
-				new_path.to_str().ok_or(std::io::Error::new(std::io::ErrorKind::Other, "Ooops! no environment variables"))?.to_string()
-			} else {
-				return Err(Into::<Box<dyn std::error::Error>>::into(std::io::Error::new(std::io::ErrorKind::Other, "Ooops! no environment variables")));
-			}
-		},
-	};*/
 
 	let (api_url, api_key) = if let (Ok(key), Ok(base), Ok(ver)) = (azure_api_key, azure_api_base, azure_api_version) {
 		let url_base = format!("{}chat/completions?api-version={}", base, ver);
@@ -199,6 +188,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 		return Ok(());
 	}
 
+	if let Some(system_prompt) = args.system_prompt {
+		println!("{}", system_prompt);
+		let overrwrite_system_prompt = fs::read_to_string(&system_prompt)?;
+		ctx.set_system_prompt(&overrwrite_system_prompt)?;
+	}
+
 	// Construct the parts of the content to be sent to the LLM
 	// allows for mulitmodal queries
 	let content = if let Some(messages) = args.messages.as_ref() {
@@ -270,7 +265,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 					let tool_call = ctx.get_tool_call(&tool_call_id)?;
 					println!("tool call id {} tool name {}", tool_call.id, tool_call.function.name);
 					let tool_function_name = tool_call.function.name.clone();
-					let tool_response = dispatcher.dispatch(&tool_call.function.name, &tool_call.function.arguments);
+					let tool_response = dispatcher.dispatch(&tool_call.function.name, &tool_call.function.arguments).await;
 					match tool_response {
 						Ok(ok_resp) => {
 							// The OK response can be sent directly to the model as content

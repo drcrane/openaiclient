@@ -3,15 +3,17 @@ use serde_json;
 //use super::todo::{TodoLibrary, TodoRequest};
 pub mod todo;
 pub mod files;
+pub mod executor;
 use self::todo::{TodoLibrary, TodoRequest};
 use self::files::{FileLibrary, WriteArgs, ReadArgs, EditArgs, MultiEditArgs};
+use self::executor::{Executor, ExecuteArgs};
 
 pub struct Dispatcher {
 	pub todoctx: TodoLibrary,
 }
 
 impl Dispatcher {
-	pub fn dispatch(&mut self, function_name: &str, arguments: &str) -> Result<String, String> {
+	pub async fn dispatch(&mut self, function_name: &str, arguments: &str) -> Result<String, String> {
 		match function_name {
 			"write" => {
 				let args: WriteArgs = serde_json::from_str(arguments).map_err(|e| e.to_string())?;
@@ -33,7 +35,7 @@ impl Dispatcher {
 				FileLibrary::multiedit(args)
 			},
 			"search_replace" => {
-				files::search_replace(arguments)
+				FileLibrary::search_replace(arguments)
 			},
 			"add_todo_task" => {
 				let args: TodoRequest = serde_json::from_str(arguments).unwrap_or(TodoRequest { name: None, task: None });
@@ -60,6 +62,18 @@ impl Dispatcher {
 				let args: TodoRequest = serde_json::from_str(arguments).unwrap_or(TodoRequest { name: None, task: None });
 				let name = args.name.ok_or(format!("Missing 'name' for {}", function_name))?;
 				self.todoctx.get_todo_tasks(&name)
+			},
+			"execute" => {
+				let args: ExecuteArgs = serde_json::from_str(arguments).unwrap_or(ExecuteArgs { command: "echo Error".to_string() });
+				let result = Executor::execute(args).await?;
+				match serde_json::to_string(&result) {
+					Ok(r) => {
+						Ok(r)
+					},
+					Err(e) => {
+						Err(e.to_string())
+					},
+				}
 			},
 			_ => Err(format!("Unknown function: {}", function_name))
 		}

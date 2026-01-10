@@ -21,121 +21,6 @@ struct SearchReplaceBlock {
 	raw_block: String,
 }
 
-pub fn search_replace(json_input: &str) -> Result<String, String> {
-	let input: SearchReplaceInput =
-		serde_json::from_str(json_input).map_err(|e| e.to_string())?;
-
-	let blocks = parse_blocks(&input.content)?;
-	apply_blocks(&input.file_path, &blocks, &input.content)
-}
-
-fn parse_blocks(content: &str) -> Result<Vec<SearchReplaceBlock>, String> {
-	let mut blocks = Vec::new();
-	let mut remaining = content;
-
-	loop {
-		let start = match remaining.find("<<<<<<< SEARCH") {
-			Some(pos) => pos,
-			None => break,
-		};
-
-		let after_start = &remaining[start + "<<<<<<< SEARCH".len()..];
-
-		let sep = after_start
-			.find("=======")
-			.ok_or("Missing ======= separator")?;
-
-		let end = after_start
-			.find(">>>>>>> REPLACE")
-			.ok_or("Missing >>>>>>> REPLACE")?;
-
-		let search = after_start[..sep].trim_start_matches('\n').to_string();
-		let replace = after_start[sep + "=======".len()..end]
-			.trim_start_matches('\n')
-			.to_string();
-
-		let raw_block = format!(
-			"<<<<<<< SEARCH\n{}=======\n{}>>>>>>> REPLACE\n",
-			search, replace
-		);
-
-		blocks.push(SearchReplaceBlock {
-			search,
-			replace,
-			raw_block,
-		});
-
-		remaining = &after_start[end + ">>>>>>> REPLACE".len()..];
-	}
-
-	if blocks.is_empty() {
-		return Err("No SEARCH/REPLACE blocks found".into());
-	}
-
-	Ok(blocks)
-}
-
-/// Apply blocks and return a report string
-fn apply_blocks(
-	file_path: &str,
-	blocks: &[SearchReplaceBlock],
-	original_content: &str,
-) -> Result<String, String> {
-	let path = Path::new(file_path);
-
-	let mut file_content =
-		fs::read_to_string(path).map_err(|e| format!("Failed to read file: {e}"))?;
-
-	let mut lines_changed = 0;
-	let mut warnings = Vec::new();
-
-	for block in blocks {
-		if !file_content.contains(&block.search) {
-			return Err(format!(
-				"SEARCH block not found in file:\n{}",
-				block.search
-			));
-		}
-
-		let search_lines = block.search.lines().count();
-		let replace_lines = block.replace.lines().count();
-
-		if search_lines != replace_lines {
-			warnings.push(format!(
-				"Line count changed from {} to {}",
-				search_lines, replace_lines
-			));
-		}
-
-		lines_changed += search_lines;
-
-		file_content = file_content.replacen(&block.search, &block.replace, 1);
-	}
-
-	fs::write(path, &file_content)
-		.map_err(|e| format!("Failed to write file: {e}"))?;
-
-	// Build report
-	let report = format!(
-		"file: {}\n\
-		 blocks_applied: {}\n\
-		 lines_changed: {}\n\
-		 content:\n{}\n\
-		 warnings: {}\n",
-		file_path,
-		blocks.len(),
-		lines_changed,
-		original_content.trim_end(),
-		if warnings.is_empty() {
-			"none".to_string()
-		} else {
-			warnings.join("; ")
-		}
-	);
-
-	Ok(report)
-}
-
 #[derive(Deserialize)]
 struct WriteFileArgs {
 	path: String,
@@ -226,8 +111,8 @@ pub struct WriteArgs {
 pub struct ReadArgs {
 	path: String,
 	show_line_numbers: Option<bool>,
-	line_start: Option<usize>,
-	line_count: Option<usize>,
+	offset: Option<usize>,
+	limit: Option<usize>,
 }
 
 #[derive(Deserialize)]
@@ -274,16 +159,16 @@ impl FileLibrary {
 	pub fn read_file(args: ReadArgs) -> Result<String, String> {
 		let content = fs::read_to_string(&args.path).map_err(|e| e.to_string())?;
 		let show_line_numbers = args.show_line_numbers.unwrap_or(false);
-		let start = args.line_start.unwrap_or(1);
+		let start = args.offset.unwrap_or(1);
 		if start == 0 {
 			return Err("line_start must be >= 1".into());
 		}
-		let count = args.line_count.unwrap_or(usize::MAX);
+		let limit = args.limit.unwrap_or(usize::MAX);
 
 		let lines: Vec<&str> = content.lines().collect();
 
 		let start_idx = start.saturating_sub(1);
-		let end_idx = (start_idx + count).min(lines.len()).min(1000);
+		let end_idx = (start + limit).min(lines.len()).min(1000);
 
 		let mut result = String::new();
 
@@ -297,6 +182,120 @@ impl FileLibrary {
 		}
 
 		Ok(result)
+	}
+
+	pub fn search_replace(json_input: &str) -> Result<String, String> {
+		let input: SearchReplaceInput =
+			serde_json::from_str(json_input).map_err(|e| e.to_string())?;
+	
+		let blocks = Self::parse_blocks(&input.content)?;
+		Self::apply_blocks(&input.file_path, &blocks, &input.content)
+	}
+	
+	fn parse_blocks(content: &str) -> Result<Vec<SearchReplaceBlock>, String> {
+		let mut blocks = Vec::new();
+		let mut remaining = content;
+	
+		loop {
+			let start = match remaining.find("<<<<<<< SEARCH") {
+				Some(pos) => pos,
+				None => break,
+			};
+	
+			let after_start = &remaining[start + "<<<<<<< SEARCH".len()..];
+	
+			let sep = after_start
+				.find("=======")
+				.ok_or("Missing ======= separator")?;
+	
+			let end = after_start
+				.find(">>>>>>> REPLACE")
+				.ok_or("Missing >>>>>>> REPLACE")?;
+	
+			let search = after_start[..sep].trim_start_matches('\n').to_string();
+			let replace = after_start[sep + "=======".len()..end]
+				.trim_start_matches('\n')
+				.to_string();
+	
+			let raw_block = format!(
+				"<<<<<<< SEARCH\n{}=======\n{}>>>>>>> REPLACE\n",
+				search, replace
+			);
+	
+			blocks.push(SearchReplaceBlock {
+				search,
+				replace,
+				raw_block,
+			});
+	
+			remaining = &after_start[end + ">>>>>>> REPLACE".len()..];
+		}
+	
+		if blocks.is_empty() {
+			return Err("No SEARCH/REPLACE blocks found".into());
+		}
+	
+		Ok(blocks)
+	}
+	
+	fn apply_blocks(
+		file_path: &str,
+		blocks: &[SearchReplaceBlock],
+		original_content: &str,
+	) -> Result<String, String> {
+		let path = Path::new(file_path);
+	
+		let mut file_content =
+			fs::read_to_string(path).map_err(|e| format!("Failed to read file: {e}"))?;
+	
+		let mut lines_changed = 0;
+		let mut warnings = Vec::new();
+	
+		for block in blocks {
+			if !file_content.contains(&block.search) {
+				return Err(format!(
+					"SEARCH block not found in file:\n{}",
+					block.search
+				));
+			}
+	
+			let search_lines = block.search.lines().count();
+			let replace_lines = block.replace.lines().count();
+	
+			if search_lines != replace_lines {
+				warnings.push(format!(
+					"Line count changed from {} to {}",
+					search_lines, replace_lines
+				));
+			}
+	
+			lines_changed += search_lines;
+	
+			file_content = file_content.replacen(&block.search, &block.replace, 1);
+		}
+	
+		fs::write(path, &file_content)
+			.map_err(|e| format!("Failed to write file: {e}"))?;
+	
+		// Build report
+		let report = format!(
+			"file: {}\n\
+			 blocks_applied: {}\n\
+			 lines_changed: {}\n\
+			 content:\n{}\n\
+			 warnings: {}\n",
+			file_path,
+			blocks.len(),
+			lines_changed,
+			original_content.trim_end(),
+			if warnings.is_empty() {
+				"none".to_string()
+			} else {
+				warnings.join("; ")
+			}
+		);
+	
+		Ok(report)
 	}
 
 	pub fn multiedit(args: MultiEditArgs) -> Result<String, String> {
