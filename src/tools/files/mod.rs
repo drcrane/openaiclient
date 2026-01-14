@@ -163,9 +163,9 @@ impl FileLibrary {
 		if start == 0 {
 			return Err("line_start must be >= 1".into());
 		}
-		let limit = args.limit.unwrap_or(usize::MAX);
 
 		let lines: Vec<&str> = content.lines().collect();
+		let limit = args.limit.unwrap_or(1000);
 
 		let start_idx = start.saturating_sub(1);
 		let end_idx = (start + limit).min(lines.len()).min(1000);

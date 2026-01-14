@@ -26,6 +26,10 @@ impl Dispatcher {
 				let args: ReadArgs = serde_json::from_str(arguments).map_err(|e| e.to_string())?;
 				FileLibrary::read_file(args)
 			},
+			"read_file" => {
+				let args: ReadArgs = serde_json::from_str(arguments).map_err(|e| e.to_string())?;
+				FileLibrary::read_file(args)
+			},
 			"edit" => {
 				let args: EditArgs = serde_json::from_str(arguments).map_err(|e| e.to_string())?;
 				FileLibrary::edit_file(args)

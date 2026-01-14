@@ -14,6 +14,10 @@ name = "aicli"
 path = "src/aicli.rs"
 
 [[bin]]
+name = "tooltester"
+path = "src/tooltester.rs"
+
+[[bin]]
 name = "todolist"
 path = "src/todolist.rs"
 
