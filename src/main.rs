@@ -163,33 +163,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 	if args.dump {
 		for message in ctx.chat.as_ref().unwrap().messages.iter() {
-			println!("# {}", message.role);
-			if let Some(openaiapi::MessageContent::Simple(mesg)) = message.content.as_ref() {
-				println!("{}", mesg);
-			}
-			if let Some(openaiapi::MessageContent::Multi(parts)) = message.content.as_ref() {
-				for part in parts {
-					match part {
-						openaiapi::ContentPart::Text { text } => println!("{text}"),
-						openaiapi::ContentPart::ImageUrl { image_url } => {
-							println!("Image ({} bytes)", image_url.url.len())
-						}
-					}
-				}
-			}
-			if let Some(tool_calls) = message.tool_calls.as_ref() {
-				for tool_call in tool_calls.iter() {
-					println!("```{}", &tool_call.function.name);
-					println!("{}", &tool_call.function.arguments);
-					println!("```");
-				}
-			}
+			println!("{}", message.human_readable_string());
 		}
 		return Ok(());
 	}
 
 	if let Some(system_prompt) = args.system_prompt {
-		println!("{}", system_prompt);
 		let overrwrite_system_prompt = fs::read_to_string(&system_prompt)?;
 		ctx.set_system_prompt(&overrwrite_system_prompt)?;
 	}

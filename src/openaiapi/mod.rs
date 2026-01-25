@@ -1,3 +1,4 @@
+use futures_util::StreamExt;
 use std::path::{Path,PathBuf};
 use serde_json;
 use serde_derive::{Deserialize, Serialize};
@@ -6,6 +7,8 @@ use std::time::Duration;
 use url::Url;
 use reqwest::header::{CONTENT_TYPE,CONTENT_LENGTH,AUTHORIZATION};
 use std::fs;
+use std::fs::OpenOptions;
+use std::io::Write;
 use thiserror::Error;
 //use std::rc::Rc;
 
@@ -83,8 +86,34 @@ impl Message {
 	pub fn normal(role: String, content: MessageContent) -> Self {
 		Message{ role: role, content: Some(content), name: None, tool_calls: None, tool_call_id: None }
 	}
+	pub fn tool_request(role: String, content: MessageContent, tool_calls: Vec<ToolCall>) -> Self {
+		Message{ role: role, content: Some(content), name: None, tool_calls: Some(tool_calls), tool_call_id: None }
+	}
 	pub fn tool_response(role: String, name: String, tool_call_id: String, content: MessageContent) -> Self {
 		Message{ role: role, name: Some(name), tool_call_id: Some(tool_call_id), content: Some(content), tool_calls: None }
+	}
+	pub fn human_readable_string(&self) -> String {
+		let mut result = String::new();
+		result.push_str(&format!("# {}\n", &self.role));
+		if let Some(MessageContent::Simple(mesg)) = self.content.as_ref() {
+			result.push_str(&format!("{}\n", &mesg));
+		}
+		if let Some(MessageContent::Multi(parts)) = self.content.as_ref() {
+			for part in parts {
+				match part {
+					ContentPart::Text { text } => result.push_str(&format!("{text}")),
+					ContentPart::ImageUrl { image_url } => {
+						result.push_str(&format!("Image ({} bytes)", image_url.url.len()))
+					}
+				}
+			}
+		}
+		if let Some(tool_calls) = self.tool_calls.as_ref() {
+			for tool_call in tool_calls.iter() {
+				result.push_str(&format!("```{}\n{}\n```", &tool_call.function.name, &tool_call.function.arguments));
+			}
+		}
+		result
 	}
 }
 
@@ -348,6 +377,7 @@ impl ChatContext {
 		Ok(())
 	}
 
+	// This is actually a tool response, not a tool call request from the model
 	pub fn add_tool_message(&mut self, role: &str, name: &str, tool_call_id: &str, message: MessageContent) -> Result<(), Box<dyn std::error::Error>> {
 		let message = Message{
 			role: role.to_string(),
@@ -362,6 +392,9 @@ impl ChatContext {
 	}
 
 	pub async fn call_api(&mut self) -> Result<String, Box<dyn std::error::Error>> {
+		if let Some(chat) = self.chat.as_mut() {
+			chat.stream = Some(true);
+		}
 		let serialised = serde_json::to_string_pretty(&self.chat)?;
 		if self.write_req_resp {
 			fs::write("last_request.json", &serialised)?;
@@ -387,41 +420,115 @@ impl ChatContext {
 			.body(serialised)
 			.send()
 			.await?;
-		let body = req.text().await?;
+		let mut stream = req.bytes_stream();
+		let mut body = String::with_capacity(4096);
+		while let Some(chunk) = stream.next().await {
+			let bytes = chunk?;
+			let text = String::from_utf8_lossy(&bytes);
+			println!("{}", &text);
+			body.push_str(&text);
+		}
+		//let body = req.text().await?;
 		if self.write_req_resp {
 			fs::write("last_response.json", &body)?;
 		}
-		let response = Self::parse_response(&body)?;
-		let human_content = match response.content.as_ref() {
-			Some(MessageContent::Simple(content)) => content.to_string(),
-			Some(MessageContent::Multi(content_parts)) => {
-				let mut s = String::new();
-				for part in content_parts {
-					if let ContentPart::Text { text } = &part {
-						s = s + text + "\n";
-					} else
-					if let ContentPart::ImageUrl { image_url } = &part {
-						s.push_str(&format!("Image ({} bytes)\n", image_url.url.len()));
+		// Check if this looks like a streaming response by checking for SSE format
+		let response_message = if body.contains("data: ") && body.contains("[DONE]") {
+			// This appears to be a streaming response, parse it accordingly
+			Self::parse_streaming_response(&body)?
+		} else {
+			// This is a regular non-streaming response
+			Self::parse_response(&body)?
+		};
+		let result = Ok(Message::human_readable_string(&response_message));
+		self.add_message(response_message);
+		result
+	}
+
+	pub fn parse_streaming_response(accumulated_message: &str) -> Result<Message, Box<dyn std::error::Error>> {
+		// Parse the accumulated streaming message to extract the full response
+		// Streaming responses come as multiple JSON objects separated by newlines
+		let mut full_response = String::new();
+		let mut tool_calls = Vec::new();
+
+		let mut tool_call_id = String::new();
+		let mut tool_call_type = String::new();
+		let mut tool_call_function_name = String::new();
+		let mut tool_call_function_arguments = String::new();
+
+		for line in accumulated_message.lines() {
+			let line = line.trim();
+			if !line.is_empty() && line != "[DONE]" {
+				if line.starts_with("data: ") {
+					let data = &line[6..]; // Remove "data: " prefix
+					if let Ok(json_value) = serde_json::from_str::<serde_json::Value>(data) {
+						if let Some(choices) = json_value.get("choices") {
+							if let Some(first_choice) = choices.get(0) {
+								if let Some(index) = first_choice.get("index") {
+									// not really sure what this does.
+								}
+
+								if let Some(delta) = first_choice.get("delta") {
+									// Handle text content
+									if let Some(content) = delta.get("content") {
+										if let Some(content_str) = content.as_str() {
+											full_response.push_str(content_str);
+										}
+									}
+
+									// Handle tool calls
+									if let Some(tool_calls_array) = delta.get("tool_calls") {
+										if let Some(array) = tool_calls_array.as_array() {
+											for tool_call_value in array {
+												if let Some(id) = tool_call_value.get("id").and_then(serde_json::Value::as_str) {
+													tool_call_id = id.to_string();
+												}
+												if let Some(tool_type) = tool_call_value.get("type").and_then(serde_json::Value::as_str) {
+													tool_call_type = tool_type.to_string();
+												}
+												let function = tool_call_value.get("function").and_then(serde_json::Value::as_object);
+												if let Some(value) = function {
+													if let Some(name) = value.get("name").and_then(serde_json::Value::as_str) {
+														tool_call_function_name = name.to_string();
+													}
+													if let Some(arguments) = value.get("arguments").and_then(serde_json::Value::as_str) {
+														tool_call_function_arguments.push_str(&arguments.to_string());
+													}
+												}
+											}
+										}
+									}
+								}
+
+								if let Some(finish_reason) = first_choice.get("finish_reason").and_then(serde_json::Value::as_str) {
+									if finish_reason == "tool_calls" {
+										let tool_call: ToolCall = ToolCall{ id: tool_call_id, tool_type: tool_call_type, function: FunctionCall { name: tool_call_function_name, arguments: tool_call_function_arguments } };
+										//println!("tool_call: {}", serde_json::to_string(&tool_call)?);
+										tool_calls.push(tool_call);
+										tool_call_id = String::new();
+										tool_call_type = String::new();
+										tool_call_function_name = String::new();
+										tool_call_function_arguments = String::new();
+									}
+								}
+							}
+						}
 					}
 				}
-				s
-			},
-			None => "".to_string(),
-		};
-		//serde_json::to_string_pretty(&tool_calls)?,
-		let content = match response.tool_calls.as_ref() {
-			Some(tool_calls) => {
-				let formatted_calls: Vec<String> = tool_calls.into_iter().map(|call|
-					format!("{}: {}\n", call.function.name, call.function.arguments))
-					.collect();
-				format!("{}\n{}", &human_content, &formatted_calls.join("\n"))
-			},
-			None => human_content,
-		};
-		// in the case of a tool call...
-		//self.chat.as_mut().ok_or(Box::new(std::io::Error::new(std::io::ErrorKind::Other, "Chat not present in context")))?.messages.push(response);
-		self.add_message(response);
-		Ok(content)
+			}
+		}
+		// Format the response with tool calls if present
+		//if !tool_calls.is_empty() {
+		//	let tool_calls_content: Vec<String> = tool_calls.iter().map(|call|
+		//		format!("{}: {}", call.function.name, call.function.arguments))
+		//		.collect();
+		//	full_response.push_str(&format!("\n{}", tool_calls_content.join("\n")));
+		//}
+
+		if tool_calls.len() > 1 {
+			panic!("Tool calls cannot be more than one!");
+		}
+		Ok(Message{ role: "assistant".to_string(), content: if full_response.len() > 0 { Some(MessageContent::Simple(full_response)) } else { None }, tool_calls: if !tool_calls.is_empty() { Some(tool_calls) } else { None }, name: None, tool_call_id: None })
 	}
 
 	pub fn parse_response(response: &str) -> Result<Message, Box<dyn std::error::Error>> {
