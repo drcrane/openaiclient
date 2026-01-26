@@ -120,11 +120,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 		return Err(Into::<Box<dyn std::error::Error>>::into(std::io::Error::new(std::io::ErrorKind::Other, "Ooops! no environment variables")));
 	};
 
-	//let message = match args.message {
-	//	Some(msg) => msg,
-	//	None => "".to_string(),
-	//};
-
 	// If there are some messages
 	// if this is true then messages.len() must be > 0 I think.
 	if let Some(messages) = args.messages.as_ref() {
@@ -179,12 +174,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 		let mut content_parts: Vec<openaiapi::ContentPart> = Vec::new();
 		for message in messages {
 			let part = make_content_part(message)?;
-//			if let openaiapi::ContentPart::Text { text } = &part {
-//				println!("Text: {text}");
-//			} else
-//			if let openaiapi::ContentPart::ImageUrl { image_url } = &part {
-//				println!("Image ({} bytes)", image_url.url.len());
-//			}
 			content_parts.push(part);
 		}
 		if content_parts.len() == 1 {

@@ -1,4 +1,6 @@
 use futures_util::StreamExt;
+use bytes::BytesMut;
+use memchr::memchr;
 use std::path::{Path,PathBuf};
 use serde_json;
 use serde_derive::{Deserialize, Serialize};
@@ -75,6 +77,8 @@ pub struct Message {
 	pub role: String,
 	pub content: Option<MessageContent>,
 	#[serde(skip_serializing_if = "Option::is_none")]
+	pub reasoning_content: Option<String>,
+	#[serde(skip_serializing_if = "Option::is_none")]
 	pub name: Option<String>,
 	#[serde(skip_serializing_if = "Option::is_none")]
 	pub tool_call_id: Option<String>,
@@ -84,13 +88,13 @@ pub struct Message {
 
 impl Message {
 	pub fn normal(role: String, content: MessageContent) -> Self {
-		Message{ role: role, content: Some(content), name: None, tool_calls: None, tool_call_id: None }
+		Message{ role: role, content: Some(content), reasoning_content: None, name: None, tool_calls: None, tool_call_id: None }
 	}
 	pub fn tool_request(role: String, content: MessageContent, tool_calls: Vec<ToolCall>) -> Self {
-		Message{ role: role, content: Some(content), name: None, tool_calls: Some(tool_calls), tool_call_id: None }
+		Message{ role: role, content: Some(content), reasoning_content: None, name: None, tool_calls: Some(tool_calls), tool_call_id: None }
 	}
 	pub fn tool_response(role: String, name: String, tool_call_id: String, content: MessageContent) -> Self {
-		Message{ role: role, name: Some(name), tool_call_id: Some(tool_call_id), content: Some(content), tool_calls: None }
+		Message{ role: role, name: Some(name), tool_call_id: Some(tool_call_id), content: Some(content), tool_calls: None, reasoning_content: None }
 	}
 	pub fn human_readable_string(&self) -> String {
 		let mut result = String::new();
@@ -255,7 +259,6 @@ impl ChatContext {
 		self.chat = Some(empty_chat);
 		self.chat_id = Some(chat_id.to_string());
 		let serialised = serde_json::to_string_pretty(&self.chat)?;
-		println!("Serialised Chat: {}", serialised);
 		// if the chats_dir is not found then an error will be sent from this line (the ? operator)
 		let md = fs::metadata(&self.chats_dir)?;
 		if md.permissions().readonly() {
@@ -384,6 +387,7 @@ impl ChatContext {
 			name: Some(name.to_string()),
 			tool_call_id: Some(tool_call_id.to_string()),
 			content: Some(message),
+			reasoning_content: None,
 			tool_calls: None,
 		};
 		self.current_chat()?.messages.push(message);
@@ -391,11 +395,26 @@ impl ChatContext {
 		Ok(())
 	}
 
+	fn remove_attribute(value: &mut serde_json::Value, attribute: &str) {
+		if let Some(object) = value.as_object_mut() {
+			object.remove(attribute);
+			for v in object.values_mut() {
+				Self::remove_attribute(v, attribute);
+			}
+		} else if let Some(array) = value.as_array_mut() {
+			for v in array {
+				Self::remove_attribute(v, attribute);
+			}
+		}
+	}
+
 	pub async fn call_api(&mut self) -> Result<String, Box<dyn std::error::Error>> {
 		if let Some(chat) = self.chat.as_mut() {
 			chat.stream = Some(true);
 		}
-		let serialised = serde_json::to_string_pretty(&self.chat)?;
+		let mut value: serde_json::Value = serde_json::to_value(&self.chat)?;
+		Self::remove_attribute(&mut value, "reasoning_content");
+		let serialised = serde_json::to_string_pretty(&value)?;
 		if self.write_req_resp {
 			fs::write("last_request.json", &serialised)?;
 		}
@@ -409,7 +428,7 @@ impl ChatContext {
 		}
 		let url = self.post_url.clone();
 		let client = reqwest::Client::builder()
-			.timeout(Duration::from_secs(60 * 10))
+			//.timeout(Duration::from_secs(60 * 10))
 			.build()?;
 		let authorization = format!("Bearer {}", self.api_key);
 		let req = client
@@ -421,13 +440,41 @@ impl ChatContext {
 			.send()
 			.await?;
 		let mut stream = req.bytes_stream();
+		let mut buffer = BytesMut::new();
 		let mut body = String::with_capacity(4096);
+		let mut ctr = 0;
 		while let Some(chunk) = stream.next().await {
-			let bytes = chunk?;
-			let text = String::from_utf8_lossy(&bytes);
-			println!("{}", &text);
-			body.push_str(&text);
+			//let bytes = chunk?;
+			let chunk = chunk?;
+			print!(".");
+			std::io::stdout().flush().unwrap();
+			buffer.extend_from_slice(&chunk);
+			while let Some(pos) = buffer.iter().position(|&b| b == b'\n') {
+				let mut line = buffer.split_to(pos + 1);
+				if line.ends_with(b"\n") {
+					line.truncate(line.len() - 1);
+				}
+				if line.ends_with(b"\r") {
+					line.truncate(line.len() - 1);
+				}
+				let text = std::str::from_utf8(&line)?;
+				//let text = String::from_utf8_lossy(&line);
+				if text.len() == 0 {
+					//println!("----");
+				} else {
+					//println!("{}: {}", ctr, &text);
+				}
+				ctr = ctr + 1;
+				if text.len() == 0 {
+					// these line(s) (there could be multiple) may now be
+					// processed.
+				}
+				body.push_str(&text);
+				// just add the new line back again!
+				body.push_str("\n");
+			}
 		}
+		println!();
 		//let body = req.text().await?;
 		if self.write_req_resp {
 			fs::write("last_response.json", &body)?;
@@ -449,6 +496,7 @@ impl ChatContext {
 		// Parse the accumulated streaming message to extract the full response
 		// Streaming responses come as multiple JSON objects separated by newlines
 		let mut full_response = String::new();
+		let mut reasoning_response = String::new();
 		let mut tool_calls = Vec::new();
 
 		let mut tool_call_id = String::new();
@@ -469,6 +517,13 @@ impl ChatContext {
 								}
 
 								if let Some(delta) = first_choice.get("delta") {
+									// Handle reasoning content
+									if let Some(reasoning_content) = delta.get("reasoning_content") {
+										if let Some(reasoning_content_str) = reasoning_content.as_str() {
+											reasoning_response.push_str(reasoning_content_str);
+										}
+									}
+
 									// Handle text content
 									if let Some(content) = delta.get("content") {
 										if let Some(content_str) = content.as_str() {
@@ -528,7 +583,7 @@ impl ChatContext {
 		if tool_calls.len() > 1 {
 			panic!("Tool calls cannot be more than one!");
 		}
-		Ok(Message{ role: "assistant".to_string(), content: if full_response.len() > 0 { Some(MessageContent::Simple(full_response)) } else { None }, tool_calls: if !tool_calls.is_empty() { Some(tool_calls) } else { None }, name: None, tool_call_id: None })
+		Ok(Message{ role: "assistant".to_string(), content: if full_response.len() > 0 { Some(MessageContent::Simple(full_response)) } else { None }, reasoning_content: if reasoning_response.len() > 0 { Some(reasoning_response) } else { None }, tool_calls: if !tool_calls.is_empty() { Some(tool_calls) } else { None }, name: None, tool_call_id: None })
 	}
 
 	pub fn parse_response(response: &str) -> Result<Message, Box<dyn std::error::Error>> {
