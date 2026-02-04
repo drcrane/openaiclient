@@ -56,7 +56,7 @@ pub fn config_get_dir(name: Option<&str>) -> Result<PathBuf, std::io::Error> {
 	if let Some(app_name) = name {
 		pb.push(app_name);
 	}
-	println!("{}", pb.display());
+	println!("config_get_dir() {}", pb.display());
 	Ok(pb)
 }
 
@@ -142,6 +142,21 @@ pub fn extract_zip_file_with_password(extractor: &str, dest_path: &Path, file_pa
 	println!("{}", stdout);
 	eprintln!("{}", stderr);
 	Ok(())
+}
+
+pub fn sanitise_filename(input: &str) -> String {
+	input.chars().map(|x| match x {
+		' ' => '_',
+		':' => '_',
+		'/' => '_',
+		'\\' => '_',
+		'&' => '_',
+		'$' => '_',
+		'!' => '_',
+		'*' => '_',
+		'|' => '_',
+		_ => x,
+	}).collect()
 }
 
 const MAX_READ_BYTES: usize = 32_768;

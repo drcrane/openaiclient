@@ -9,7 +9,7 @@ use std::time::Duration;
 use url::Url;
 use reqwest::header::{CONTENT_TYPE,CONTENT_LENGTH,AUTHORIZATION};
 use std::fs;
-use std::fs::OpenOptions;
+use std::fs::{ OpenOptions, File };
 use std::io::Write;
 use thiserror::Error;
 //use std::rc::Rc;
@@ -408,6 +408,21 @@ impl ChatContext {
 		}
 	}
 
+	async fn next_chunk_with_timeout<S>(
+		stream: &mut S,
+		dur: Duration,
+	) -> Result<Option<bytes::Bytes>, Box<dyn std::error::Error>>
+	where
+		S: futures_util::Stream<Item = Result<bytes::Bytes, reqwest::Error>> + Unpin,
+	{
+		match tokio::time::timeout(dur, stream.next()).await {
+			Err(_) => Err("timed out waiting for chunk".into()),
+			Ok(Some(Ok(chunk))) => Ok(Some(chunk)),
+			Ok(Some(Err(e))) => Err(e.into()),
+			Ok(None) => Ok(None),
+		}
+	}
+
 	pub async fn call_api(&mut self) -> Result<String, Box<dyn std::error::Error>> {
 		if let Some(chat) = self.chat.as_mut() {
 			chat.stream = Some(true);
@@ -443,11 +458,20 @@ impl ChatContext {
 		let mut buffer = BytesMut::new();
 		let mut body = String::with_capacity(4096);
 		let mut ctr = 0;
-		while let Some(chunk) = stream.next().await {
-			//let bytes = chunk?;
-			let chunk = chunk?;
+		let first_chunk = tokio::time::timeout(Duration::from_secs(60 * 10), stream.next()).await.map_err(|_| "timed out waiting for initial response")?.ok_or("end of stream")?;
+		let first_chunk_bytes = first_chunk?;
+		buffer.extend_from_slice(&first_chunk_bytes);
+		let mut response_file: Option<File> = if self.write_req_resp { Some(OpenOptions::new().write(true).create(true).truncate(true).open("last_response.json")?) } else { None };
+		if let Some(file) = response_file.as_mut() {
+			file.write(&first_chunk_bytes);
+		}
+		while let Some(chunk) = Self::next_chunk_with_timeout(&mut stream, Duration::from_secs(30)).await? {
+			//let chunk = chunk?;
 			print!(".");
 			std::io::stdout().flush().unwrap();
+			if let Some(file) = response_file.as_mut() {
+				file.write(&chunk);
+			}
 			buffer.extend_from_slice(&chunk);
 			while let Some(pos) = buffer.iter().position(|&b| b == b'\n') {
 				let mut line = buffer.split_to(pos + 1);
@@ -475,10 +499,12 @@ impl ChatContext {
 			}
 		}
 		println!();
+		println!("Received {}", buffer.len());
 		//let body = req.text().await?;
-		if self.write_req_resp {
-			fs::write("last_response.json", &body)?;
-		}
+		println!("Writing response...");
+		//if self.write_req_resp {
+		//	fs::write("last_response.json", &body)?;
+		//}
 		// Check if this looks like a streaming response by checking for SSE format
 		let response_message = if body.contains("data: ") && body.contains("[DONE]") {
 			// This appears to be a streaming response, parse it accordingly
