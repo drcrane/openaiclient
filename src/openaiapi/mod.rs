@@ -467,7 +467,6 @@ impl ChatContext {
 		}
 		while let Some(chunk) = Self::next_chunk_with_timeout(&mut stream, Duration::from_secs(30)).await? {
 			//let chunk = chunk?;
-			print!(".");
 			std::io::stdout().flush().unwrap();
 			if let Some(file) = response_file.as_mut() {
 				file.write(&chunk);
@@ -487,11 +486,26 @@ impl ChatContext {
 					//println!("----");
 				} else {
 					//println!("{}: {}", ctr, &text);
+					let line = &text[6..];
+					if let Ok(json_value) = serde_json::from_str::<serde_json::Value>(line) {
+						if let Some(choices) = json_value.get("choices") {
+							if let Some(first_choice) = choices.get(0) {
+								if let Some(delta) = first_choice.get("delta") {
+									if let Some(content) = delta.get("content") {
+										if let Some(content_str) = content.as_str() {
+											print!("{}", content_str);
+										}
+									}
+								}
+							}
+						}
+					}
 				}
 				ctr = ctr + 1;
 				if text.len() == 0 {
 					// these line(s) (there could be multiple) may now be
 					// processed.
+					//println!("{}", &text);
 				}
 				body.push_str(&text);
 				// just add the new line back again!
