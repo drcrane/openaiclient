@@ -135,6 +135,17 @@ function call to the chat but not actually perform the API request the
 
     openaiclient --no-network 1001 --role tool
 
+## Templating
+
+It is expected that the usage of this client will depend quite heavily on
+templating, as such the functionality is present in the helper. A sample
+programme is available that demonstrates the process:
+
+    templaterunner testdata/TEMPLATE.md REPLACED_CONTENT testdata/TEMPLATE_CONTENT.md
+
+See the `.md` files that are present in the `testdata` directory for more
+detail.
+
 ## TODO List
 
 * Integrate the `tmux` tool allowing the LLM access to a terminal session

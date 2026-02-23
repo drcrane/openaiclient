@@ -33,6 +33,10 @@ path = "src/jsonedit.rs"
 name = "listfiles"
 path = "src/listfiles.rs"
 
+[[bin]]
+name = "templaterunner"
+path = "src/templaterunner.rs"
+
 [dependencies]
 clap = { version = "4.4.6", features = ["derive"] }
 reqwest = { version = "0.12", features = ["json", "stream"] }

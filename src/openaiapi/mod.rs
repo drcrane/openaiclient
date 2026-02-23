@@ -461,6 +461,7 @@ impl ChatContext {
 		let first_chunk = tokio::time::timeout(Duration::from_secs(60 * 10), stream.next()).await.map_err(|_| "timed out waiting for initial response")?.ok_or("end of stream")?;
 		let first_chunk_bytes = first_chunk?;
 		buffer.extend_from_slice(&first_chunk_bytes);
+		// TODO: This is not good, maybe some kind of lambda or callback?
 		let mut response_file: Option<File> = if self.write_req_resp { Some(OpenOptions::new().write(true).create(true).truncate(true).open("last_response.json")?) } else { None };
 		if let Some(file) = response_file.as_mut() {
 			file.write(&first_chunk_bytes);
@@ -505,7 +506,7 @@ impl ChatContext {
 				if text.len() == 0 {
 					// these line(s) (there could be multiple) may now be
 					// processed.
-					//println!("{}", &text);
+					// TODO: Can there be multiple? I don't think so.
 				}
 				body.push_str(&text);
 				// just add the new line back again!

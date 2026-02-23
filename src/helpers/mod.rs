@@ -320,48 +320,120 @@ impl TemplateProcessor {
 ///
 /// Returns `Ok(())` on success or the last encountered `io::Error`.
 pub fn move_file_fallback(src: &Path, dst: &Path) -> io::Result<()> {
-    // Fast path: try rename first
-    match fs::rename(src, dst) {
-        Ok(()) => return Ok(()),
-        Err(_) => {
-            // If rename failed for some reason other than cross-device, we still try fallback.
-            // We'll keep the rename error only if fallback also fails, to surface the most relevant error.
-            // Proceed to copy+remove fallback below.
-            let copy_result = copy_with_permissions(src, dst);
-            match copy_result {
-                Ok(()) => {
-                    // Remove source only after successful copy
-                    if let Err(remove_err) = fs::remove_file(src) {
-                        // Attempt to clean up the partially-copied dst on failure to remove source.
-                        let _ = fs::remove_file(dst);
-                        return Err(remove_err);
-                    }
-                    return Ok(());
-                }
-                Err(copy_err) => {
-                    // Return the copy error; if you prefer the original rename error instead, return rename_err.
-                    return Err(copy_err);
-                }
-            }
-        }
-    }
+	// Fast path: try rename first
+	match fs::rename(src, dst) {
+		Ok(()) => return Ok(()),
+		Err(_) => {
+			// If rename failed for some reason other than cross-device, we still try fallback.
+			// We'll keep the rename error only if fallback also fails, to surface the most relevant error.
+			// Proceed to copy+remove fallback below.
+			let copy_result = copy_with_permissions(src, dst);
+			match copy_result {
+				Ok(()) => {
+					// Remove source only after successful copy
+					if let Err(remove_err) = fs::remove_file(src) {
+						// Attempt to clean up the partially-copied dst on failure to remove source.
+						let _ = fs::remove_file(dst);
+						return Err(remove_err);
+					}
+					return Ok(());
+				}
+				Err(copy_err) => {
+					// Return the copy error; if you prefer the original rename error instead, return rename_err.
+					return Err(copy_err);
+				}
+			}
+		}
+	}
 }
 
 fn copy_with_permissions(src: &Path, dst: &Path) -> io::Result<()> {
-    // Ensure parent directory of dst exists (or let copy fail)
-    if let Some(parent) = dst.parent() {
-        fs::create_dir_all(parent)?;
-    }
+	// Ensure parent directory of dst exists (or let copy fail)
+	if let Some(parent) = dst.parent() {
+		fs::create_dir_all(parent)?;
+	}
 
-    // Perform copy (streams content)
-    fs::copy(src, dst)?;
+	// Perform copy (streams content)
+	fs::copy(src, dst)?;
 
-    // Try to preserve permissions; ignore if not supported on platform
-    if let Ok(metadata) = fs::metadata(src) {
-        let perm = metadata.permissions();
-        let _ = fs::set_permissions(dst, perm);
-    }
+	// Try to preserve permissions; ignore if not supported on platform
+	if let Ok(metadata) = fs::metadata(src) {
+		let perm = metadata.permissions();
+		let _ = fs::set_permissions(dst, perm);
+	}
 
-    Ok(())
+	Ok(())
+}
+
+pub fn wrap_line(line: &str, max_line_length: usize) -> String {
+	line
+		.lines()
+		.map(|single_line| wrap_single_line(single_line, max_line_length).join("\n"))
+		.collect::<Vec<_>>()
+		.join("\n")
+}
+
+pub fn wrap_single_line(mut line: &str, max_line_length: usize) -> Vec<&str> {
+	let mut result: Vec<&str> = Vec::new();
+
+	while line.chars().count() > max_line_length {
+		let mut last_space_byte = None;
+		let mut split_byte = None;
+
+		for (char_idx, (byte_idx, ch)) in line.char_indices().enumerate() {
+			if char_idx == max_line_length {
+				split_byte = Some(byte_idx);
+				break;
+			}
+			if ch == ' ' {
+				last_space_byte = Some(byte_idx);
+			}
+		}
+
+		match last_space_byte {
+			Some(space_byte) => {
+				result.push(&line[..space_byte]);
+				line = &line[space_byte + 1..];
+			}
+			None => {
+				let split = split_byte.expect("split index must exist");
+				result.push(&line[..split]);
+				line = &line[split..];
+			}
+		}
+	}
+
+	result.push(line);
+	result
+}
+
+pub fn read_file(filename: &str, start_line_number: usize, line_count_limit: usize, max_line_len: usize, show_line_numbers: bool) -> Result<String, String> {
+	let content = fs::read_to_string(&filename).map_err(|e| e.to_string())?;
+	let start = start_line_number;
+	if start == 0 {
+		return Err("line_start must be >= 1".into());
+	}
+
+	let lines: Vec<&str> = content.lines().flat_map(|line| wrap_single_line(line, max_line_len)).collect();
+	if line_count_limit == 0 {
+		return Err("line_count_limit must be >= 1".into());
+	}
+	let limit = line_count_limit - 1;
+
+	let start_idx = start.saturating_sub(1);
+	let end_idx = (start + limit).min(lines.len()).min(1000);
+
+	let mut result = String::new();
+
+	for (i, line) in lines[start_idx..end_idx].iter().enumerate() {
+		if show_line_numbers {
+			result.push_str(&format!("{:>}: {}\n", start_idx + i + 1, line));
+		} else {
+			result.push_str(line);
+			result.push('\n');
+		}
+	}
+
+	Ok(result)
 }
 
