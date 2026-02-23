@@ -18,6 +18,39 @@ fn azure_response_parse_test() {
 	println!("{:?}", chat_response);
 }
 
+#[test]
+fn streaming_response_parse_test() {
+	let content = std::fs::read_to_string("testdata/streaming_response.txt").unwrap();
+	let mut ctx = openaiapi::ChatContext::new(
+		std::path::PathBuf::from("."),
+		std::path::PathBuf::from("."),
+		"http://localhost:8080".to_string(),
+		"test_key".to_string()
+	).unwrap();
+	let result = openaiapi::ChatContext::parse_streaming_response(&content);
+	println!("Streaming parse result: {:?}", result);
+	assert!(result.is_ok());
+	let parsed_content = result.unwrap();
+	assert_eq!(parsed_content, "Hello world!");
+}
+
+#[test]
+fn streaming_response_with_tools_parse_test() {
+	let content = std::fs::read_to_string("testdata/streaming_response_with_tools.txt").unwrap();
+	let mut ctx = openaiapi::ChatContext::new(
+		std::path::PathBuf::from("."),
+		std::path::PathBuf::from("."),
+		"http://localhost:8080".to_string(),
+		"test_key".to_string()
+	).unwrap();
+	let result = openaiapi::ChatContext::parse_streaming_response(&content);
+	println!("Streaming with tools parse result: {:?}", result);
+	assert!(result.is_ok());
+	let parsed_content = result.unwrap();
+	assert!(parsed_content.contains("I need to use a tool to solve this."));
+	assert!(parsed_content.contains("test_function: {\"param\":\"value\"}"));
+}
+
 #[derive(Serialize, Deserialize, Debug)]
 struct SampleConfig {
 	name: String,

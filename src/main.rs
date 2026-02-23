@@ -20,11 +20,11 @@ mod test;
 struct Cli {
 	chat_id: String,
 	#[arg(num_args = 0..)]
-	/// The message to send to the assistant.\n
+	/// The message to send to the assistant.
 	/// Prefix a filename with @ to send that file as your message.
 	/// Only text and images (jpg, png) are supported.
-	/// Use - to read from stdin (must be the last and only appear once)
-	/// stdin must be UTF-8, images are not supported.
+	/// Use - to read from stdin (must appear at most once)
+	/// stdin must be UTF-8, images are not supported (for stdin).
 	messages: Option<Vec<String>>,
 	#[clap(long, default_value = "user")]
 	role: String,
@@ -38,6 +38,9 @@ struct Cli {
 	/// overwrite system prompt with the content of this file
 	system_prompt: Option<String>,
 	#[clap(long)]
+	/// use this file as the chat template (defaults to "config_dir/empty_chat.json")
+	chat_template: Option<String>,
+	#[clap(long)]
 	/// dump the current chat in a nice format
 	dump: bool,
 	#[clap(long)]
@@ -47,6 +50,7 @@ struct Cli {
 	/// tool call id (default is to use the id of the last tool call that does not have a response)
 	tool_call_id: Option<String>,
 	#[clap(long)]
+	/// this is not currently used for anything
 	pretend: bool,
 	#[clap(long, default_value = "false")]
 	/// just append the message, do not perform an API call
