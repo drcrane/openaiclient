@@ -15,7 +15,7 @@ context in a very simple manner.
 
 Missing dependencies will be downloaded by cargo.
 
-    cargo build
+    cargo build --profile=dev
 
 Build release version:
 

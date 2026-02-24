@@ -565,6 +565,12 @@ impl ChatContext {
 										}
 									}
 
+									if let Some(reasoning) = delta.get("reasoning") {
+										if let Some(reasoning_str) = reasoning.as_str() {
+											reasoning_response.push_str(reasoning_str);
+										}
+									}
+
 									// Handle text content
 									if let Some(content) = delta.get("content") {
 										if let Some(content_str) = content.as_str() {
