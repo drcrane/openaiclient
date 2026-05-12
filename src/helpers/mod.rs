@@ -13,6 +13,7 @@ use serde::de::DeserializeOwned;
 use std::string;
 use std::collections::HashMap;
 use thiserror::Error;
+use ignore::gitignore::GitignoreBuilder;
 
 #[derive(Debug, Error)]
 pub enum HelperError {
@@ -114,6 +115,42 @@ pub fn list_files<F>(dir: &Path, mut accept: F, depth: usize) -> Result<Vec<Path
 		}
 	}
 	Ok(files_list)
+}
+
+pub fn make_gitignore_matcher(gitignore_contents: &str,) -> impl Fn(&Path) -> bool {
+	let mut builder = GitignoreBuilder::new("");
+
+	for line in gitignore_contents.lines() {
+		builder.add_line(None, line).unwrap();
+	}
+
+	let gitignore = builder.build().unwrap();
+
+	move |path: &Path| {
+		gitignore
+			.matched(path, path.is_dir())
+			.is_ignore()
+	}
+}
+
+pub fn make_gitaccept_matcher(gitignore_contents: &str,) -> impl Fn(&Path) -> Option<PathBuf> {
+	let mut builder = GitignoreBuilder::new("");
+
+	for line in gitignore_contents.lines() {
+		builder.add_line(None, line).unwrap();
+	}
+
+	let gitignore = builder.build().unwrap();
+
+	move |path: &Path| -> Option<PathBuf> {
+		if !gitignore
+			.matched(path, path.is_dir())
+			.is_ignore() {
+			Some(PathBuf::from(path))
+		} else {
+			None
+		}
+	}
 }
 
 pub fn extract_zip_file_with_password(extractor: &str, dest_path: &Path, file_path: &Path, password: &str) -> Result<(), HelperError> {

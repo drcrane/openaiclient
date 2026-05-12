@@ -145,7 +145,8 @@ fn lines_with_offsets(started_at: Instant, lines: &[TimedLine]) -> String {
 				None => -(started_at.duration_since(tl.at).as_millis() as i128),
 			};
 
-			format!("{:>5}| {}", millis, tl.line)
+			//format!("{:0>5}: {}", millis, tl.line)
+			format!("{}", tl.line)
 		})
 		.collect::<Vec<_>>()
 		.join("\n")

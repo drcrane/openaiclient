@@ -158,7 +158,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 		ctx.set_model_name(&model_name);
 	}
 	ctx.write_req_resp = args.write_req_resp;
-	ctx.load_or_new_chat(&args.chat_id)?;
+	ctx.load_or_new_chat(&args.chat_id, &args.chat_template)?;
 
 	if args.dump {
 		for message in ctx.chat.as_ref().unwrap().messages.iter() {
@@ -227,7 +227,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 				if args.role == "tool" {
 					// there is no name and the message to be appended is empty
 					// we should execute the tool
-					let mut dispatcher = tools::Dispatcher{ todoctx: tools::todo::TodoLibrary::new(&todo_database) };
+					let mut dispatcher = tools::Dispatcher{ };
 					let last_tool_call_id = ctx.get_last_pending_tool_call_id()?;
 					let tool_call_id = if let Some(tool_call_id) = last_tool_call_id {
 						tool_call_id

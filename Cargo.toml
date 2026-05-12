@@ -18,10 +18,6 @@ name = "tooltester"
 path = "src/tooltester.rs"
 
 [[bin]]
-name = "todolist"
-path = "src/todolist.rs"
-
-[[bin]]
 name = "filesexample"
 path = "src/filesexample.rs"
 

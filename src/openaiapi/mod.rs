@@ -246,10 +246,15 @@ impl ChatContext {
 		}
 	}
 
-	pub fn new_chat(&mut self, chat_id: &str) -> Result<(), Box<dyn std::error::Error>> {
-		let mut empty_chat_file: PathBuf = self.config_dir.clone();
-		empty_chat_file.push("empty_chat.json");
-		//println!("Loading template from: {}", empty_chat_file.display());
+	pub fn new_chat(&mut self, chat_id: &str, chat_template: &Option<String>) -> Result<(), Box<dyn std::error::Error>> {
+		let mut empty_chat_file: PathBuf = if let Some(template_file) = chat_template {
+			PathBuf::from(template_file)
+		} else {
+			let mut chat_template = self.config_dir.clone();
+			chat_template.push("empty_chat.json");
+			chat_template
+		};
+		println!("Loading template from: {}", empty_chat_file.display());
 		let mut empty_chat = helpers::read_from_json::<Chat>(empty_chat_file)?;
 		if empty_chat.model == "" {
 			if let Some(model) = &self.model_name {
@@ -297,11 +302,11 @@ impl ChatContext {
 		}
 	}
 
-	pub fn load_or_new_chat(&mut self, chat_id: &str) -> Result<(), Box<dyn std::error::Error>> {
+	pub fn load_or_new_chat(&mut self, chat_id: &str, chat_template: &Option<String>) -> Result<(), Box<dyn std::error::Error>> {
 		if (self.load_chat(&chat_id).is_ok()) {
 			Ok(())
 		} else {
-			self.new_chat(&chat_id)
+			self.new_chat(&chat_id, chat_template)
 		}
 	}
 

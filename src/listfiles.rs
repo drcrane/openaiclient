@@ -8,7 +8,7 @@ use std::io;
 use std::path::{Path, PathBuf};
 use regex::Regex;
 use std::ffi::OsString;
-use tools::files::make_gitaccept_matcher;
+use helpers::make_gitaccept_matcher;
 
 pub fn list_files<F>(dir: &Path, accept: &F, depth: usize) -> Result<Vec<PathBuf>, io::Error>
 where

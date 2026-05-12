@@ -6,7 +6,7 @@ use std::env;
 
 #[tokio::main]
 async fn main() -> Result<(), String> {
-	let mut dispatcher = tools::Dispatcher{ todoctx: tools::todo::TodoLibrary::new("todolist.sqlite3") };
+	let mut dispatcher = tools::Dispatcher{  };
 
 	let args: Vec<String> = env::args().collect();
 	println!("{}", &args[1]);

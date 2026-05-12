@@ -4,7 +4,7 @@ mod tools;
 
 #[tokio::main]
 async fn main() -> Result<(), String> {
-	let mut dispatcher = tools::Dispatcher{ todoctx: tools::todo::TodoLibrary::new("todolist.sqlite3") };
+	let mut dispatcher = tools::Dispatcher{  };
 
 	//let rt = tokio::runtime::Runtime::new().unwrap();
 	//rt.block_on(dispatcher.dispatch("something", "{}"))
