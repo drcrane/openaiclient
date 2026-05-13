@@ -9,7 +9,7 @@ use std::env;
 use serde::ser::StdError;
 use base64::{engine::general_purpose, Engine};
 
-mod helpers;
+pub mod helpers;
 mod openaiapi;
 mod tools;
 

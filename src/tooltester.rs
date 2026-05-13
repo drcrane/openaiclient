@@ -1,8 +1,15 @@
 #![allow(unused)]
 
+pub mod helpers;
 mod tools;
 
 use std::env;
+
+/*
+
+target/debug/tooltester read '{"path":"README.md","offset":1,"limit":999999999999999999}'
+
+ */
 
 #[tokio::main]
 async fn main() -> Result<(), String> {
