@@ -12,6 +12,7 @@ use base64::{engine::general_purpose, Engine};
 pub mod helpers;
 mod openaiapi;
 mod tools;
+use tools::Dispatcher;
 
 #[cfg(test)]
 mod test;

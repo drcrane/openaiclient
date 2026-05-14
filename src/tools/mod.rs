@@ -4,7 +4,7 @@ use serde_json;
 //pub mod todo;
 //pub mod files;
 pub mod files;
-use self::files::{FileTool, ReadArgs};
+use self::files::{FileTool, ReadArgs, EditArgs, WriteArgs};
 pub mod executor;
 use self::executor::{Executor, ExecuteArgs};
 
@@ -17,27 +17,41 @@ impl Dispatcher {
 			"read" => {
 				match serde_json::from_str::<ReadArgs>(arguments).map_err(|err| err.to_string()) {
 					Ok(args) => {
-						Ok("OK".to_string())
+						FileTool::read(args)
 					},
 					Err(err) => {
 						Err(err.to_string())
 					},
 				}
-				//if let Ok(args) = args_in {
-				//	FileTool::read(args)
-				//} else {
-				//	Err("Error".to_string())
-				//}
+			},
+			"edit" => {
+				match serde_json::from_str::<EditArgs>(arguments).map_err(|err| err.to_string()) {
+					Ok(args) => {
+						FileTool::edit(args)
+					},
+					Err(err) => {
+						Err(err.to_string())
+					},
+				}
+			},
+			"write" => {
+				match serde_json::from_str::<WriteArgs>(arguments).map_err(|err| err.to_string()) {
+					Ok(args) => {
+						FileTool::write(args)
+					},
+					Err(err) => {
+						Err(err.to_string())
+					},
+				}
 			},
 			"execute" => {
-				let args: ExecuteArgs = serde_json::from_str(arguments).unwrap_or(ExecuteArgs { command: "echo Error".to_string() });
-				let result = Executor::execute(args).await?;
-				match serde_json::to_string(&result) {
-					Ok(r) => {
-						Ok(r)
+				match serde_json::from_str::<ExecuteArgs>(arguments).map_err(|err| err.to_string()) {
+					Ok(args) => {
+						let result = Executor::execute(args).await?;
+						Ok(serde_json::to_string(&result).map_err(|err| err.to_string())?)
 					},
-					Err(e) => {
-						Err(e.to_string())
+					Err(err) => {
+						Err(err)
 					},
 				}
 			},

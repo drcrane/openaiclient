@@ -146,11 +146,20 @@ programme is available that demonstrates the process:
 See the `.md` files that are present in the `testdata` directory for more
 detail.
 
+## Tools and Tool Testing
+
+    tooltester read '{"path":"test.txt","offset":1,"limit":100}'
+
 ## TODO List
 
 * Integrate the `tmux` tool allowing the LLM access to a terminal session
 
 See ***Control Mode*** on [tmux wiki](https://github.com/tmux/tmux/wiki/Control-Mode)
+
+## Compiling `llama.cpp`
+
+Most development on this programme was performed with `llama.cpp` using local
+models on a machine that requires ROCm.
 
 ## Known Working
 
@@ -162,6 +171,7 @@ Alpine Linux release 3.18.6
 
 ## References
 
+* [Mistral AI Tokenizer](https://mistralai.github.io/mistral-common/usage/tokenizers/)
 * [openinterpreter on Azure](https://docs.openinterpreter.com/language-model-setup/hosted-models/azure)
 * [litellm](https://github.com/BerriAI/litellm)
 * [Error Handling](https://www.youtube.com/watch?v=UgIQo__luHw)
