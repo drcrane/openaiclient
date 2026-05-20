@@ -3,7 +3,7 @@
 
 use std::io;
 use serde_derive::{Deserialize};
-use crate::helpers::{self};
+use crate::helpers::{self, EditReplacement};
 
 #[derive(Deserialize)]
 pub struct WriteArgs {
@@ -64,8 +64,38 @@ impl FileTool {
 		}
 	}
 
+	pub fn format_replacements(replacements: &[EditReplacement]) -> String {
+		let mut output = String::new();
+		for (i, edit) in replacements.iter().enumerate() {
+			output.push_str("<replacement>\n");
+			if !edit.before_context.is_empty() {
+				output.push_str(&edit.before_context);
+			}
+			output.push_str(&edit.replacement);
+			if !edit.after_context.is_empty() {
+				output.push_str(&edit.after_context);
+				output.push('\n');
+			}
+			output.push_str("</replacement>");
+			// Add a newline between multiple replacements, but not after the last one
+			if i < replacements.len() - 1 {
+				output.push('\n');
+			}
+		}
+		output
+	}
+
 	pub fn edit(args: EditArgs) -> Result<String, String> {
-		Ok("Edit OK".to_string())
+		// Assuming helpers::edit_file takes path, old_string, new_string, and replace_all
+		let edit_result = helpers::edit_file(&args.path, &args.old_string, &args.new_string, args.replace_all);
+		match edit_result {
+			Ok(updated_content) => {
+				Ok(format!("<path>{}</path>\n{}\n", &args.path, Self::format_replacements(&updated_content)))
+			}
+			Err(e) => {
+				Err(e)
+			}
+		}
 	}
 
 	pub fn write(args: WriteArgs) -> Result<String, String> {

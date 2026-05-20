@@ -149,6 +149,7 @@ detail.
 ## Tools and Tool Testing
 
     tooltester read '{"path":"test.txt","offset":1,"limit":100}'
+    tooltester edit '{"path":"test.txt","oldString":"project is going","newString":"project is not going","replaceAll":false}'
 
 ## TODO List
 
