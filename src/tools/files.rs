@@ -64,7 +64,48 @@ impl FileTool {
 		}
 	}
 
-	pub fn format_replacements(replacements: &[EditReplacement]) -> String {
+	fn format_replacements(replacements: &[EditReplacement]) -> String {
+		let mut output = String::new();
+
+		for (i, edit) in replacements.iter().enumerate() {
+			output.push_str("<replacement>\n");
+
+			// 1. Reconstruct the entire text block for this edit
+			let mut full_text = String::new();
+			full_text.push_str(&edit.before_context);
+			full_text.push_str(&edit.replacement);
+			full_text.push_str(&edit.after_context);
+
+			// 2. Calculate exactly where this combined block starts in the file.
+			// We look at how many newlines are in before_context to find the starting line.
+			let before_line_count = edit.before_context.lines().count();
+
+			// If before_context doesn't end in a newline, it shares its last line 
+			// with the start of the replacement.
+			let adjustments = if !edit.before_context.is_empty() && !edit.before_context.ends_with('\n') {
+				before_line_count.saturating_sub(1)
+			} else {
+				before_line_count
+			};
+
+			let mut current_line = edit.start_line.saturating_sub(adjustments);
+
+			// 3. Process line by line
+			for line in full_text.lines() {
+				output.push_str(&format!("{}: {}\n", current_line, line));
+				current_line += 1;
+			}
+
+			output.push_str("</replacement>");
+
+			if i < replacements.len() - 1 {
+				output.push('\n');
+			}
+		}
+		output
+	}
+
+	fn format_replacements_no_linenumbers(replacements: &[EditReplacement]) -> String {
 		let mut output = String::new();
 		for (i, edit) in replacements.iter().enumerate() {
 			output.push_str("<replacement>\n");
@@ -99,7 +140,15 @@ impl FileTool {
 	}
 
 	pub fn write(args: WriteArgs) -> Result<String, String> {
-		Ok("Write OK".to_string())
+		let write_result = helpers::write_file(&args.path, &args.content);
+		match write_result {
+			Ok(success) => {
+				Ok(format!("<path>{}</path>\n<result>Success, written {} bytes</result>", &args.path, success.bytes))
+			},
+			Err(e) => {
+				Err(e)
+			},
+		}
 	}
 }
 

@@ -475,6 +475,7 @@ pub fn read_file(filename: &str, start_line_number: usize, line_count_limit: usi
 }
 
 pub struct EditReplacement {
+	pub start_line: usize,
 	// up to 4 lines before the applied edit
 	pub before_context: String,
 	// the replacement the lines in "new_string"
@@ -484,77 +485,89 @@ pub struct EditReplacement {
 }
 
 pub fn edit_file(filename: &str, old_string: &str, new_string: &str, replace_all: bool) -> Result<Vec<EditReplacement>, String> {
-	let content = fs::read_to_string(&filename).map_err(|e| e.to_string())?;
+    let content = fs::read_to_string(&filename).map_err(|e| e.to_string())?;
 
-	if old_string.is_empty() {
-		return Err("The string to replace cannot be empty.".to_string());
-	}
+    if old_string.is_empty() {
+        return Err("The string to replace cannot be empty.".to_string());
+    }
 
-	let mut replacements = Vec::new();
-	let mut new_content = String::new();
-	let mut last_match_end = 0;
+    let mut replacements = Vec::new();
+    let mut new_content = String::new();
+    let mut last_match_end = 0;
 
-	// Find all starting indices of old_string
-	let mut match_indices = Vec::new();
-	let mut search_pos = 0;
-	while let Some(start_idx) = content[search_pos..].find(old_string) {
-		let actual_start = search_pos + start_idx;
-		match_indices.push(actual_start);
-		search_pos = actual_start + old_string.len();
+    // Find all starting indices of old_string
+    let mut match_indices = Vec::new();
+    let mut search_pos = 0;
+    while let Some(start_idx) = content[search_pos..].find(old_string) {
+        let actual_start = search_pos + start_idx;
+        match_indices.push(actual_start);
+        search_pos = actual_start + old_string.len();
 
-		if !replace_all {
-			break;
-		}
-	}
+        if !replace_all {
+            break;
+        }
+    }
 
-	if match_indices.is_empty() {
-		return Err(format!("Could not find '{}' in the file.", old_string));
-	}
+    if match_indices.is_empty() {
+        return Err(format!("Could not find '{}' in the file.", old_string));
+    }
 
-	for &start_idx in &match_indices {
-		let end_idx = start_idx + old_string.len();
+    for &start_idx in &match_indices {
+        let end_idx = start_idx + old_string.len();
 
-		// Append the text between the last match and this match
-		new_content.push_str(&content[last_match_end..start_idx]);
-		new_content.push_str(new_string);
-		last_match_end = end_idx;
+        // Append the text between the last match and this match
+        new_content.push_str(&content[last_match_end..start_idx]);
+        new_content.push_str(new_string);
+        last_match_end = end_idx;
 
-		// --- Context Extraction ---
-		// Helper to find line boundaries
-		let before_text = &content[..start_idx];
-		let after_text = &content[end_idx..];
+        // --- Context Extraction ---
+        let before_text = &content[..start_idx];
+        let after_text = &content[end_idx..];
 
-		// Extract up to 4 lines before
-		let before_context = before_text
-			.lines()
-			.rev()
-			.take(4)
-			.collect::<Vec<&str>>()
-			.into_iter()
-			.rev()
-			.collect::<Vec<&str>>()
-			.join("\n");
+        // Total lines in the file up to the match (1-indexed)
+        let match_line_num = before_text.matches('\n').count() + 1;
 
-		// Extract up to 4 lines after
-		let after_context = after_text
-			.lines()
-			.take(4)
-			.collect::<Vec<&str>>()
-			.join("\n");
+        // Extract up to 4 lines before
+        let before_lines: Vec<&str> = before_text.lines().rev().take(4).collect::<Vec<&str>>().into_iter().rev().collect();
+        let before_context = before_lines.join("\n");
 
-		replacements.push(EditReplacement {
-			before_context,
-			replacement: new_string.to_string(),
-			after_context,
-		});
-	}
+        // Calculate the exact line number where the before_context starts
+        let start_line = match_line_num - before_lines.len().saturating_sub(1);
 
-	// Append the remaining part of the file
-	new_content.push_str(&content[last_match_end..]);
+        // Extract up to 4 lines after
+        let after_context = after_text
+            .lines()
+            .take(4)
+            .collect::<Vec<&str>>()
+            .join("\n");
 
-	// Write the modified content back to the file
-	fs::write(filename, new_content).map_err(|e| e.to_string())?;
+        replacements.push(EditReplacement {
+            start_line,
+            before_context,
+            replacement: new_string.to_string(),
+            after_context,
+        });
+    }
 
-	Ok(replacements)
+    // Append the remaining part of the file
+    new_content.push_str(&content[last_match_end..]);
+
+    // Write the modified content back to the file
+    fs::write(filename, new_content).map_err(|e| e.to_string())?;
+
+    Ok(replacements)
+}
+pub struct WriteSuccess {
+	pub bytes: usize,
+}
+
+pub fn write_file(path: &str, content: &str) -> Result<WriteSuccess, String> {
+	// Attempt to create (or truncate) the file at the given path
+	let mut file = File::create(path).map_err(|e| format!("Failed to create file: {}", e))?;
+	let bytes_to_write = content.as_bytes();
+	file.write_all(bytes_to_write).map_err(|e| format!("Failed to write to file: {}", e))?;
+	Ok(WriteSuccess {
+		bytes: bytes_to_write.len(),
+	})
 }
 

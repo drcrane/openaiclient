@@ -148,8 +148,9 @@ detail.
 
 ## Tools and Tool Testing
 
+    tooltester write '{"path":"test.txt","content":"# This is a README.md File\n\nThe project is not going very well, I want to find someone to save it!\n\n## Finally, Some Testing\n\nlorem ipsom anyone?\n"}'
+    tooltester edit '{"path":"test.txt","oldString":"project is not going","newString":"project is going","replaceAll":false}'
     tooltester read '{"path":"test.txt","offset":1,"limit":100}'
-    tooltester edit '{"path":"test.txt","oldString":"project is going","newString":"project is not going","replaceAll":false}'
 
 ## TODO List
 
