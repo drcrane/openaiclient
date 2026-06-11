@@ -474,89 +474,151 @@ pub fn read_file(filename: &str, start_line_number: usize, line_count_limit: usi
 	Ok(result)
 }
 
-pub struct EditReplacement {
+pub struct EditReplacementLine {
 	pub start_line: usize,
-	// up to 4 lines before the applied edit
-	pub before_context: String,
-	// the replacement the lines in "new_string"
-	pub replacement: String,
-	// up to 4 lines after the replacement
-	pub after_context: String,
+	pub line_count: usize,
 }
 
-pub fn edit_file(filename: &str, old_string: &str, new_string: &str, replace_all: bool) -> Result<Vec<EditReplacement>, String> {
-    let content = fs::read_to_string(&filename).map_err(|e| e.to_string())?;
+pub fn edit_file_lines(
+	filename: &str,
+	old_string: &str,
+	new_string: &str,
+	replace_all: bool,
+) -> Result<Vec<EditReplacementLine>, String> {
+	let replacements = edit_file(
+		filename,
+		old_string.as_bytes(),
+		new_string.as_bytes(),
+		replace_all,
+	)?;
 
-    if old_string.is_empty() {
-        return Err("The string to replace cannot be empty.".to_string());
-    }
+	if replacements.is_empty() {
+		return Ok(Vec::new());
+	}
 
-    let mut replacements = Vec::new();
-    let mut new_content = String::new();
-    let mut last_match_end = 0;
+	// Read the resulting file.
+	let contents = fs::read(filename)
+		.map_err(|e| format!("failed to read {filename}: {e}"))?;
 
-    // Find all starting indices of old_string
-    let mut match_indices = Vec::new();
-    let mut search_pos = 0;
-    while let Some(start_idx) = content[search_pos..].find(old_string) {
-        let actual_start = search_pos + start_idx;
-        match_indices.push(actual_start);
-        search_pos = actual_start + old_string.len();
+	// Collect newline positions.
+	let mut newlines = Vec::new();
+	for (i, &b) in contents.iter().enumerate() {
+		if b == b'\n' {
+			newlines.push(i);
+		}
+	}
 
-        if !replace_all {
-            break;
-        }
-    }
+	let mut result = Vec::with_capacity(replacements.len());
+	let replacement_line_count = new_string.lines().count();
 
-    if match_indices.is_empty() {
-        return Err(format!("Could not find '{}' in the file.", old_string));
-    }
+	for replacement in replacements {
+		// Count newlines before the replacement offset.
+		let line = match newlines.binary_search(&replacement.start) {
+			Ok(idx) => idx + 1,
+			Err(idx) => idx + 1,
+		};
 
-    for &start_idx in &match_indices {
-        let end_idx = start_idx + old_string.len();
+		result.push(EditReplacementLine {
+			start_line: line,
+			line_count: replacement_line_count,
+		});
+	}
 
-        // Append the text between the last match and this match
-        new_content.push_str(&content[last_match_end..start_idx]);
-        new_content.push_str(new_string);
-        last_match_end = end_idx;
-
-        // --- Context Extraction ---
-        let before_text = &content[..start_idx];
-        let after_text = &content[end_idx..];
-
-        // Total lines in the file up to the match (1-indexed)
-        let match_line_num = before_text.matches('\n').count() + 1;
-
-        // Extract up to 4 lines before
-        let before_lines: Vec<&str> = before_text.lines().rev().take(4).collect::<Vec<&str>>().into_iter().rev().collect();
-        let before_context = before_lines.join("\n");
-
-        // Calculate the exact line number where the before_context starts
-        let start_line = match_line_num - before_lines.len().saturating_sub(1);
-
-        // Extract up to 4 lines after
-        let after_context = after_text
-            .lines()
-            .take(4)
-            .collect::<Vec<&str>>()
-            .join("\n");
-
-        replacements.push(EditReplacement {
-            start_line,
-            before_context,
-            replacement: new_string.to_string(),
-            after_context,
-        });
-    }
-
-    // Append the remaining part of the file
-    new_content.push_str(&content[last_match_end..]);
-
-    // Write the modified content back to the file
-    fs::write(filename, new_content).map_err(|e| e.to_string())?;
-
-    Ok(replacements)
+	Ok(result)
 }
+
+pub struct EditReplacementByteLoc {
+	/// Byte offset in the resulting file.
+	pub start: usize,
+	/// Length of the inserted bytes.
+	pub len: usize,
+}
+
+pub fn edit_file(
+	filename: &str,
+	old_string: &[u8],
+	new_string: &[u8],
+	replace_all: bool,
+) -> Result<Vec<EditReplacementByteLoc>, String> {
+	if old_string.is_empty() {
+		return Err("old_string may not be empty".into());
+	}
+
+	let input = fs::read(filename)
+		.map_err(|e| format!("failed to read {filename}: {e}"))?;
+
+	// Find matches in the original buffer.
+	let mut matches = Vec::new();
+	let mut pos = 0;
+
+	if matches.len() == 0 {
+		return Err("No matches found".to_string())
+	}
+
+	while pos + old_string.len() <= input.len() {
+		if &input[pos..pos + old_string.len()] == old_string {
+			matches.push(pos);
+
+			if !replace_all {
+				break;
+			}
+
+			pos += old_string.len();
+		} else {
+			pos += 1;
+		}
+	}
+
+	if matches.is_empty() {
+		return Ok(Vec::new());
+	}
+
+	let old_len = old_string.len();
+	let new_len = new_string.len();
+
+	let replacement_count = matches.len();
+
+	let final_size = if new_len >= old_len {
+		input.len() + (new_len - old_len) * replacement_count
+	} else {
+		input.len() - (old_len - new_len) * replacement_count
+	};
+
+	let mut output = Vec::with_capacity(final_size);
+	let mut replacements = Vec::with_capacity(replacement_count);
+
+	let mut src_cursor = 0;
+	let mut dst_cursor = 0;
+
+	for &match_pos in &matches {
+		// Copy unchanged bytes.
+		output.extend_from_slice(&input[src_cursor..match_pos]);
+		dst_cursor += match_pos - src_cursor;
+
+		// Record offset in resulting file.
+		replacements.push(EditReplacementByteLoc {
+			start: dst_cursor,
+			len: new_len,
+		});
+
+		// Insert replacement.
+		output.extend_from_slice(new_string);
+		dst_cursor += new_len;
+
+		src_cursor = match_pos + old_len;
+	}
+
+	// Copy remainder.
+	output.extend_from_slice(&input[src_cursor..]);
+
+	debug_assert_eq!(output.len(), final_size);
+
+	fs::write(filename, &output)
+		.map_err(|e| format!("failed to write {filename}: {e}"))?;
+
+	Ok(replacements)
+}
+
 pub struct WriteSuccess {
 	pub bytes: usize,
 }

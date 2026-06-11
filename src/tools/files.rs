@@ -3,7 +3,8 @@
 
 use std::io;
 use serde_derive::{Deserialize};
-use crate::helpers::{self, EditReplacement};
+use crate::helpers::{self, EditReplacementLine};
+use std::fs;
 
 #[derive(Deserialize)]
 pub struct WriteArgs {
@@ -64,74 +65,69 @@ impl FileTool {
 		}
 	}
 
-	fn format_replacements(replacements: &[EditReplacement]) -> String {
-		let mut output = String::new();
+	fn format_replacements(text: &str, hits: &[EditReplacementLine]) -> String {
+		let lines: Vec<_> = text.lines().collect();
+		let lines_above = 2;
+		let lines_below = 2;
 
-		for (i, edit) in replacements.iter().enumerate() {
-			output.push_str("<replacement>\n");
+		if hits.is_empty() {
+			return "".to_string();
+		}
 
-			// 1. Reconstruct the entire text block for this edit
-			let mut full_text = String::new();
-			full_text.push_str(&edit.before_context);
-			full_text.push_str(&edit.replacement);
-			full_text.push_str(&edit.after_context);
+		let mut ranges = Vec::new();
 
-			// 2. Calculate exactly where this combined block starts in the file.
-			// We look at how many newlines are in before_context to find the starting line.
-			let before_line_count = edit.before_context.lines().count();
+		for line in hits {
+			let start = line.start_line.saturating_sub(lines_above);
+			let line_count = line.line_count.saturating_sub(1);
+			let end = (line.start_line + line_count + lines_below).min(lines.len() - 1);
+			ranges.push((start, end));
+		}
 
-			// If before_context doesn't end in a newline, it shares its last line 
-			// with the start of the replacement.
-			let adjustments = if !edit.before_context.is_empty() && !edit.before_context.ends_with('\n') {
-				before_line_count.saturating_sub(1)
+		// Merge overlapping/adjacent ranges.
+		let mut merged = Vec::new();
+		let mut current = ranges[0];
+
+		for range in ranges.into_iter().skip(1) {
+			if range.0 <= current.1 + 1 {
+				current.1 = current.1.max(range.1);
 			} else {
-				before_line_count
-			};
-
-			let mut current_line = edit.start_line.saturating_sub(adjustments);
-
-			// 3. Process line by line
-			for line in full_text.lines() {
-				output.push_str(&format!("{}: {}\n", current_line, line));
-				current_line += 1;
-			}
-
-			output.push_str("</replacement>");
-
-			if i < replacements.len() - 1 {
-				output.push('\n');
+				merged.push(current);
+				current = range;
 			}
 		}
-		output
-	}
 
-	fn format_replacements_no_linenumbers(replacements: &[EditReplacement]) -> String {
-		let mut output = String::new();
-		for (i, edit) in replacements.iter().enumerate() {
-			output.push_str("<replacement>\n");
-			if !edit.before_context.is_empty() {
-				output.push_str(&edit.before_context);
+		merged.push(current);
+		let mut replacements = String::new();
+		let mut replacement_count = 0;
+
+		for (start, end) in merged {
+			replacements.push_str("<replacement>\n");
+
+			for line_no in start..=end {
+				replacements.push_str(&format!("{}: {}\n", line_no + 1, lines[line_no]));
 			}
-			output.push_str(&edit.replacement);
-			if !edit.after_context.is_empty() {
-				output.push_str(&edit.after_context);
-				output.push('\n');
-			}
-			output.push_str("</replacement>");
-			// Add a newline between multiple replacements, but not after the last one
-			if i < replacements.len() - 1 {
-				output.push('\n');
+
+			replacements.push_str("</replacement>");
+			replacement_count = replacement_count + 1;
+			if replacement_count < hits.len() {
+				replacements.push('\n');
 			}
 		}
-		output
+
+		replacements
 	}
 
 	pub fn edit(args: EditArgs) -> Result<String, String> {
 		// Assuming helpers::edit_file takes path, old_string, new_string, and replace_all
-		let edit_result = helpers::edit_file(&args.path, &args.old_string, &args.new_string, args.replace_all);
+		let edit_result = helpers::edit_file_lines(&args.path, &args.old_string, &args.new_string, args.replace_all);
 		match edit_result {
 			Ok(updated_content) => {
-				Ok(format!("<path>{}</path>\n{}\n", &args.path, Self::format_replacements(&updated_content)))
+				let contents = fs::read(&args.path)
+					.map_err(|e| format!("failed to read {}: {e}", args.path))?;
+				let file_lines = String::from_utf8(contents.to_vec())
+					.map_err(|e| format!("failed to convert file contents to utf-8: {e}"))?;
+				Ok(format!("File Path: {}\nTotal Replacements: {}\n{}\n",
+					&args.path, updated_content.len(), Self::format_replacements(&file_lines, &updated_content)))
 			}
 			Err(e) => {
 				Err(e)
@@ -143,7 +139,7 @@ impl FileTool {
 		let write_result = helpers::write_file(&args.path, &args.content);
 		match write_result {
 			Ok(success) => {
-				Ok(format!("<path>{}</path>\n<result>Success, written {} bytes</result>", &args.path, success.bytes))
+				Ok(format!("File Path: {}\n<result>Success, written {} bytes</result>", &args.path, success.bytes))
 			},
 			Err(e) => {
 				Err(e)
