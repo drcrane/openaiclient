@@ -551,10 +551,6 @@ pub fn edit_file(
 	let mut matches = Vec::new();
 	let mut pos = 0;
 
-	if matches.len() == 0 {
-		return Err("No matches found".to_string())
-	}
-
 	while pos + old_string.len() <= input.len() {
 		if &input[pos..pos + old_string.len()] == old_string {
 			matches.push(pos);
@@ -569,8 +565,8 @@ pub fn edit_file(
 		}
 	}
 
-	if matches.is_empty() {
-		return Ok(Vec::new());
+	if matches.len() == 0 {
+		return Err("No matches found".to_string())
 	}
 
 	let old_len = old_string.len();
