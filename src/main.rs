@@ -1,6 +1,7 @@
 #![allow(unused)]
 
 use clap::{CommandFactory,Parser};
+use chrono::Local;
 use url::Url;
 use std::path::PathBuf;
 use std::fs::{self,File,OpenOptions};
@@ -115,6 +116,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 		}
 	})?;
 
+	let current_dir = env::current_dir()?;
+	let current_dir_str = current_dir.to_string_lossy();
+
 	let (api_url, api_key) = if let (Ok(key), Ok(base), Ok(ver)) = (azure_api_key, azure_api_base, azure_api_version) {
 		let url_base = format!("{}chat/completions?api-version={}", base, ver);
 		(url_base, key)
@@ -158,6 +162,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 	if let (Ok(model_name)) = openaicompat_model_name {
 		ctx.set_model_name(&model_name);
 	}
+	ctx.set_pwd(&current_dir_str);
 	ctx.write_req_resp = args.write_req_resp;
 	ctx.load_or_new_chat(&args.chat_id, &args.chat_template)?;
 
@@ -243,12 +248,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 						Ok(ok_resp) => {
 							// The OK response can be sent directly to the model as content
 							println!("OK response: {}", &ok_resp);
-							ctx.add_tool_message("tool", &tool_function_name, &tool_call_id, openaiapi::MessageContent::Simple(ok_resp.to_string()));
+							ctx.add_tool_message("tool", &tool_function_name, &tool_call_id, openaiapi::MessageContent::Simple(ok_resp));
 						},
 						Err(err_resp) => {
 							// The error response should be appropriately encoded to send back to the
 							// model, it should also be reported to the user.
-							eprintln!("Error response: {}", err_resp);
+							eprintln!("Error response: {}", &err_resp);
+							ctx.add_tool_message("tool", &tool_function_name, &tool_call_id, openaiapi::MessageContent::Simple(err_resp));
 						},
 					};
 				}

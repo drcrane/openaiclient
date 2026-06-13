@@ -1,5 +1,6 @@
 use futures_util::StreamExt;
 use bytes::BytesMut;
+use chrono::Local;
 use memchr::memchr;
 use std::path::{Path,PathBuf};
 use serde_json;
@@ -12,7 +13,6 @@ use std::fs;
 use std::fs::{ OpenOptions, File };
 use std::io::Write;
 use thiserror::Error;
-//use std::rc::Rc;
 
 use crate::helpers;
 
@@ -134,6 +134,12 @@ impl From<&str> for MessageContent {
 	}
 }
 
+impl From<&std::string::String> for MessageContent {
+	fn from(s: &std::string::String) -> Self {
+		MessageContent::Simple(s.to_string())
+	}
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(tag = "type")] //, rename_all = "lowercase")]
 pub enum ContentPart {
@@ -208,6 +214,7 @@ pub struct ChatContext {
 	api_key: String,
 	post_url: url::Url,
 	dirty: bool,
+	pwd: String,
 	pub write_req_resp: bool,
 	model_name: Option<String>,
 }
@@ -222,6 +229,7 @@ impl ChatContext {
 			api_key: api_key,
 			post_url: url::Url::parse(&post_url)?,
 			dirty: true,
+			pwd: "".to_string(),
 			write_req_resp: false,
 			model_name: None,
 		})
@@ -237,13 +245,26 @@ impl ChatContext {
 			if (message.role != "system") {
 				Err(Box::new(ChatError::new(ChatErrorKind::SystemPromptNotFound, "First message was not a system prompt")))
 			} else {
-				message.content = Some(MessageContent::from(system_prompt));
+				let mut template_processor = helpers::TemplateProcessor::new();
+				// %a = Short form Day of Week (Sun, Mon, etc) %b short form Month %d day of month
+				let current_date = Local::now().format("%a %Y %b %d").to_string();
+				let os_platform = "linux";
+				template_processor.add_replacement("PWD".to_string(), self.pwd.to_string());
+				template_processor.add_replacement("LONG_FORM_DATE_YMD".to_string(), current_date);
+				template_processor.add_replacement("PLATFORM".to_string(), os_platform.to_string());
+				let system_prompt_ = template_processor.process_template(system_prompt);
+				message.content = Some(MessageContent::from(&system_prompt_));
 				self.dirty = true;
 				Ok(())
 			}
 		} else {
 			Err(Box::new(ChatError::new(ChatErrorKind::SystemPromptNotFound, "There are no messages.")))
 		}
+	}
+
+	pub fn set_pwd(&mut self, pwd: &str) -> Result<(), Box<dyn std::error::Error>> {
+		self.pwd = pwd.to_string();
+		Ok(())
 	}
 
 	pub fn new_chat(&mut self, chat_id: &str, chat_template: &Option<String>) -> Result<(), Box<dyn std::error::Error>> {

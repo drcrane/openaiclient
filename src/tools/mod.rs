@@ -15,7 +15,7 @@ impl Dispatcher {
 	pub async fn dispatch(&mut self, function_name: &str, arguments: &str) -> Result<String, String> {
 		match function_name {
 			"read" => {
-				match serde_json::from_str::<ReadArgs>(arguments).map_err(|err| err.to_string()) {
+				match serde_json::from_str::<ReadArgs>(arguments) {
 					Ok(args) => {
 						FileTool::read(args)
 					},
@@ -25,7 +25,7 @@ impl Dispatcher {
 				}
 			},
 			"edit" => {
-				match serde_json::from_str::<EditArgs>(arguments).map_err(|err| err.to_string()) {
+				match serde_json::from_str::<EditArgs>(arguments) {
 					Ok(args) => {
 						FileTool::edit(args)
 					},
@@ -35,7 +35,7 @@ impl Dispatcher {
 				}
 			},
 			"write" => {
-				match serde_json::from_str::<WriteArgs>(arguments).map_err(|err| err.to_string()) {
+				match serde_json::from_str::<WriteArgs>(arguments) {
 					Ok(args) => {
 						FileTool::write(args)
 					},
@@ -45,13 +45,13 @@ impl Dispatcher {
 				}
 			},
 			"execute" => {
-				match serde_json::from_str::<ExecuteArgs>(arguments).map_err(|err| err.to_string()) {
+				match serde_json::from_str::<ExecuteArgs>(arguments) {
 					Ok(args) => {
 						let result = Executor::execute(args).await?;
 						Ok(serde_json::to_string(&result).map_err(|err| err.to_string())?)
 					},
 					Err(err) => {
-						Err(err)
+						Err(err.to_string())
 					},
 				}
 			},
