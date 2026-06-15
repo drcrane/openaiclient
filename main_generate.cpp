@@ -8,9 +8,9 @@
 
 /*
  * Building with CMake:
- * cmake -B build .
+ * cmake -S . -B build
  * cmake --build build -j 1
- * https://huggingface.co/mradermacher/Broken-Tutu-24B-Unslop-v2.0-GGUF/resolve/main/Broken-Tutu-24B-Unslop-v2.0.Q8_0.gguf
+ * https://huggingface.co/mistralai/Ministral-3-14B-Reasoning-2512-GGUF/blob/main/Ministral-3-14B-Reasoning-2512-Q8_0.gguf
  * g++ main_generate.cpp -I../llama.cpp/include -I../llama.cpp/ggml/include -L../llama.cpp/build/bin -lggml-base -lggml -lllama -o run_generate -pthread -std=c++17
  * LD_LIBRARY_PATH=../llama.cpp/build/bin ./run_generate
  */
@@ -37,59 +37,58 @@ static std::string token_to_piece(
 }
 
 int print_available_backends() {
-//
-// List available devices
-//
+	//
+	// List available devices
+	//
 
-int n_devices = ggml_backend_dev_count();
-
-std::cout
-	<< "\n=== AVAILABLE DEVICES ===\n";
-
-for (int i = 0; i < n_devices; i++) {
-
-	ggml_backend_dev_t dev =
-		ggml_backend_dev_get(i);
-
-	const char * name =
-		ggml_backend_dev_name(dev);
-
-	const char * description =
-		ggml_backend_dev_description(dev);
-
-	auto type =
-		ggml_backend_dev_type(dev);
-
-	std::string type_str;
-
-	switch (type) {
-		case GGML_BACKEND_DEVICE_TYPE_CPU:
-			type_str = "CPU";
-			break;
-
-		case GGML_BACKEND_DEVICE_TYPE_GPU:
-			type_str = "GPU";
-			break;
-
-		case GGML_BACKEND_DEVICE_TYPE_ACCEL:
-			type_str = "ACCELERATOR";
-			break;
-
-		default:
-			type_str = "UNKNOWN";
-			break;
-	}
+	int n_devices = ggml_backend_dev_count();
 
 	std::cout
-		<< "[" << i << "] "
-		<< type_str
-		<< " : "
-		<< name
-		<< " : "
-		<< description
-		<< "\n";
-}
-return 0;
+		<< "\n=== AVAILABLE DEVICES ===\n";
+
+	for (int i = 0; i < n_devices; i++) {
+		ggml_backend_dev_t dev =
+			ggml_backend_dev_get(i);
+
+		const char * name =
+			ggml_backend_dev_name(dev);
+
+		const char * description =
+			ggml_backend_dev_description(dev);
+
+		auto type =
+			ggml_backend_dev_type(dev);
+
+		std::string type_str;
+
+		switch (type) {
+			case GGML_BACKEND_DEVICE_TYPE_CPU:
+				type_str = "CPU";
+				break;
+
+			case GGML_BACKEND_DEVICE_TYPE_GPU:
+				type_str = "GPU";
+				break;
+
+			case GGML_BACKEND_DEVICE_TYPE_ACCEL:
+				type_str = "ACCELERATOR";
+				break;
+
+			default:
+				type_str = "UNKNOWN";
+				break;
+		}
+
+		std::cout
+			<< "[" << i << "] "
+			<< type_str
+			<< " : "
+			<< name
+			<< " : "
+			<< description
+			<< "\n";
+	}
+	return 0;
 }
 
 int main(int argc, char *argv[]) {
@@ -174,10 +173,17 @@ int main(int argc, char *argv[]) {
 
 	//
 	// Prompt
+	// This Prompt contains special tokens for the Mistral AI models.
+	// Qwen, Gemma, DeepSeek and OpenAI Models all have their own "reserved words"
 	//
 
-	std::string prompt =
+	std::string prompt_ministral =
 		"<s>[INST]Hello, how are you today?[/INST]";
+
+	std::string prompt_qwen =
+		"<|im_start|>system\nYou are a helpful assistant<|im_end|>\n<|im_start|>user\nHello, how are you today?<|endoftext|>\n<think>";
+
+	std::string prompt = prompt_ministral;
 
 	//
 	// Tokenize
