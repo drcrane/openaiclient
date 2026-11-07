@@ -50,7 +50,20 @@ enum RunResult {
 const MAX_LINES: usize = 128;
 const MAX_LINE_LEN: usize = 256;
 
-fn push_bounded(buf: &mut Vec<TimedLine>, kind: StreamKind, mut line: String) {
+fn truncate_bytes(s: &str, max_bytes: usize) -> String {
+	if s.len() <= max_bytes {
+		return s.to_string();
+	}
+	let mut end = max_bytes;
+	while end > 0 && !s.is_char_boundary(end) {
+		end -= 1;
+	}
+	s[..end].to_string()
+}
+
+fn push_bounded(buf: &mut Vec<TimedLine>, kind: StreamKind, line: String) {
+	let line = truncate_bytes(&line, MAX_LINE_LEN);
+
 	if line.len() > MAX_LINE_LEN {
 		line.truncate(MAX_LINE_LEN);
 	}

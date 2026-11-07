@@ -630,9 +630,11 @@ impl ChatContext {
 
 								if let Some(finish_reason) = first_choice.get("finish_reason").and_then(serde_json::Value::as_str) {
 									if finish_reason == "tool_calls" {
-										let tool_call: ToolCall = ToolCall{ id: tool_call_id, tool_type: tool_call_type, function: FunctionCall { name: tool_call_function_name, arguments: tool_call_function_arguments } };
-										//println!("tool_call: {}", serde_json::to_string(&tool_call)?);
-										tool_calls.push(tool_call);
+										if !tool_call_id.is_empty() || !tool_call_function_name.is_empty() {
+											let tool_call: ToolCall = ToolCall{ id: tool_call_id, tool_type: tool_call_type, function: FunctionCall { name: tool_call_function_name, arguments: tool_call_function_arguments } };
+											//println!("tool_call: {}", serde_json::to_string(&tool_call)?);
+											tool_calls.push(tool_call);
+										}
 										tool_call_id = String::new();
 										tool_call_type = String::new();
 										tool_call_function_name = String::new();
@@ -652,6 +654,14 @@ impl ChatContext {
 		//		.collect();
 		//	full_response.push_str(&format!("\n{}", tool_calls_content.join("\n")));
 		//}
+
+		// Some providers emit the complete tool_call chunk AFTER the
+		// finish_reason chunk. If one is still pending at end-of-stream,
+		// finalize it now so it is not silently dropped.
+		if !tool_call_id.is_empty() || !tool_call_function_name.is_empty() {
+			let tool_call: ToolCall = ToolCall{ id: tool_call_id, tool_type: tool_call_type, function: FunctionCall { name: tool_call_function_name, arguments: tool_call_function_arguments } };
+			tool_calls.push(tool_call);
+		}
 
 		if tool_calls.len() > 1 {
 			panic!("Tool calls cannot be more than one!");
