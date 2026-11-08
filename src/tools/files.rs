@@ -19,17 +19,22 @@ pub struct ReadArgs {
 	pub offset: i32,
 	#[serde(default = "ReadArgs::default_limit")]
 	pub limit: i32,
+	#[serde(rename = "addLoc", default = "ReadArgs::default_add_loc")]
+	pub add_loc: bool,
 }
 
 impl ReadArgs {
 	pub fn new() -> Self {
-		ReadArgs{ path: "".to_string(), offset: 1, limit: 2000 }
+		ReadArgs{ path: "".to_string(), offset: 1, limit: 2000, add_loc: false }
 	}
 	pub fn default_offset() -> i32 {
 		1
 	}
 	pub fn default_limit() -> i32 {
 		2000
+	}
+	pub fn default_add_loc() -> bool {
+		false
 	}
 }
 
@@ -56,7 +61,8 @@ impl FileTool {
 	pub fn read(args: ReadArgs) -> Result<String, String> {
 		let offset: usize = args.offset.try_into().map_err(|e| "Cannot convert offset into usize".to_string())?;
 		let limit: usize = args.limit.try_into().map_err(|e| "Cannot convert limit into usize".to_string())?;
-		let file_contents = helpers::read_file(&args.path, offset, limit, 500, true);
+		let add_loc: bool = args.add_loc.try_into().map_err(|e| "Cannot convert addLoc to bool".to_string())?;
+		let file_contents = helpers::read_file(&args.path, offset, limit, 500, add_loc);
 		if let Ok(content) = file_contents {
 			let result = format!("<path>{}</path>\n<content>\n{}</content>\n", &args.path, &content);
 			Ok(result)

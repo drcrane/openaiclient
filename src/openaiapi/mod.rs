@@ -484,6 +484,7 @@ impl ChatContext {
 		let mut buffer = BytesMut::new();
 		let mut body = String::with_capacity(4096);
 		let mut ctr = 0;
+		let mut colour = 0;
 		let first_chunk = tokio::time::timeout(Duration::from_secs(60 * 10), stream.next()).await.map_err(|_| "timed out waiting for initial response")?.ok_or("end of stream")?;
 		let first_chunk_bytes = first_chunk?;
 		buffer.extend_from_slice(&first_chunk_bytes);
@@ -518,8 +519,30 @@ impl ChatContext {
 						if let Some(choices) = json_value.get("choices") {
 							if let Some(first_choice) = choices.get(0) {
 								if let Some(delta) = first_choice.get("delta") {
+									if let Some(reasoning) = delta.get("reasoning") {
+										if let Some(reasoning_str) = reasoning.as_str() {
+											if (colour != 2) {
+												colour = 2;
+												print!("\x1b[31m");
+											}
+											print!("{}", reasoning_str);
+										}
+									} else
+									if let Some(reasoning) = delta.get("reasoning_content") {
+										if let Some(reasoning_str) = reasoning.as_str() {
+											if (colour != 2) {
+												colour = 2;
+												print!("\x1b[31m");
+											}
+											print!("{}", reasoning_str);
+										}
+									} else
 									if let Some(content) = delta.get("content") {
 										if let Some(content_str) = content.as_str() {
+											if (colour != 1) {
+												colour = 1;
+												print!("\x1b[32m");
+											}
 											print!("{}", content_str);
 										}
 									}
@@ -537,6 +560,10 @@ impl ChatContext {
 				body.push_str(&text);
 				// just add the new line back again!
 				body.push_str("\n");
+			}
+			if (colour != 0) {
+				colour = 0;
+				print!("\x1b[39m");
 			}
 		}
 		println!();

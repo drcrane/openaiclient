@@ -61,8 +61,8 @@ fn truncate_bytes(s: &str, max_bytes: usize) -> String {
 	s[..end].to_string()
 }
 
-fn push_bounded(buf: &mut Vec<TimedLine>, kind: StreamKind, line: String) {
-	let line = truncate_bytes(&line, MAX_LINE_LEN);
+fn push_bounded(buf: &mut Vec<TimedLine>, kind: StreamKind, in_line: String) {
+	let mut line = truncate_bytes(&in_line, MAX_LINE_LEN);
 
 	if line.len() > MAX_LINE_LEN {
 		line.truncate(MAX_LINE_LEN);
