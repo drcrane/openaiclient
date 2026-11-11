@@ -40,7 +40,18 @@ impl Dispatcher {
 						FileTool::write(args)
 					},
 					Err(err) => {
-						Err(err.to_string())
+						// Here we try and parse more than one file write request...
+						let res = "";
+						for write_args in serde_json::Deserializer::from_str(arguments).into_iter::<WriteArgs>() {
+							let write_args = write_args.map_err( |e| e.to_string() )?;
+							let args_string = serde_json::to_string(&write_args).map_err( |e| e.to_string() )?;
+							let res = res.to_owned() + &FileTool::write(write_args)?;
+						}
+						if res == "" {
+							Err(err.to_string())
+						} else {
+							Ok(res.to_string())
+						}
 					},
 				}
 			},
