@@ -74,3 +74,46 @@ fn save_config() {
 	println!("{:?}", config);
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn converts_the_given_example() {
+        let input = r#"{"name":"jeff","value":"}{hello"}{"name":"robin","value":"goodbye}{"}"#;
+        let expected = r#"[{"name":"jeff","value":"}{hello"},{"name":"robin","value":"goodbye}{"}]"#;
+
+        assert_eq!(
+            concatenated_objects_to_json_array(input).unwrap(),
+            expected
+        );
+    }
+
+    #[test]
+    fn handles_escaped_quotes_nested_objects_arrays_and_separators() {
+        let input = r#"{"a":"\"}","b":{"c":"}"}} , {"arr":[{"x":"}{"}]}"#;
+        let expected = r#"[{"a":"\"}","b":{"c":"}"}},{"arr":[{"x":"}{"}]}]"#;
+
+        assert_eq!(
+            concatenated_objects_to_json_array(input).unwrap(),
+            expected
+        );
+    }
+
+    #[test]
+    fn empty_input_returns_empty_array() {
+        assert_eq!(concatenated_objects_to_json_array("").unwrap(), "[]");
+    }
+
+    #[test]
+    fn tolerates_existing_array_brackets() {
+        let input = r#"[{"a":1},{"b":2}]"#;
+        let expected = r#"[{"a":1},{"b":2}]"#;
+
+        assert_eq!(
+            concatenated_objects_to_json_array(input).unwrap(),
+            expected
+        );
+    }
+}
+
